@@ -163,17 +163,17 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const Spacer(),
-                        TextButton(
-                          // ✅ skip diarahkan ke userShell
-                          onPressed: () => Navigator.pushReplacementNamed(
-                            context,
-                            Routes.userShell,
-                          ),
-                          child: const Text(
-                            'Later (skip)',
-                            style: TextStyle(color: Colors.white70),
-                          ),
-                        ),
+                        // TextButton(
+                        //   // ✅ skip diarahkan ke userShell
+                        //   onPressed: () => Navigator.pushReplacementNamed(
+                        //     context,
+                        //     Routes.userShell,
+                        //   ),
+                        //   child: const Text(
+                        //     'Later (skip)',
+                        //     style: TextStyle(color: Colors.white70),
+                        //   ),
+                        // ),
                       ],
                     ),
                   ),

@@ -3,8 +3,8 @@ class AppConfig {
   /// flutter run --dart-define=API_BASE_URL=http://localhost
   /// Build:
   /// flutter build apk --dart-define=API_BASE_URL=https://api.domainmu.com
-  static const String baseUrl =
-      String.fromEnvironment('API_BASE_URL', defaultValue: 'http://localhost');
+  static const String baseUrl = String.fromEnvironment('API_BASE_URL',
+      defaultValue: 'https://jagomasak.djncloud.my.id');
 
   /// Semua endpoint Laravel kamu ada di routes/api.php => prefix /api
   static String get apiBaseUrl => '${baseUrl.trim()}/api';

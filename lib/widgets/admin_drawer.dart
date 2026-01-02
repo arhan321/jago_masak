@@ -1,178 +1,221 @@
 import 'package:flutter/material.dart';
-import '../core/routes.dart';
-import '../core/app_theme.dart';
+import 'package:dio/dio.dart';
 
-class AdminDrawer extends StatelessWidget {
+import '../core/app_theme.dart';
+import '../core/routes.dart';
+import '../core/network/api_client.dart';
+import '../core/storage/token_storage.dart';
+
+class AdminDrawer extends StatefulWidget {
   const AdminDrawer({super.key});
 
-  void _goToDashboard(BuildContext context) {
+  @override
+  State<AdminDrawer> createState() => _AdminDrawerState();
+}
+
+class _AdminDrawerState extends State<AdminDrawer> {
+  String _adminName = 'Admin';
+  bool _loadingMe = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMe();
+  }
+
+  Future<void> _fetchMe() async {
+    setState(() => _loadingMe = true);
+
+    try {
+      final dio = ApiClient.instance.dio;
+      final res = await dio.get('/me'); // baseUrl sudah .../api
+      final data = res.data;
+
+      if (!mounted) return;
+
+      if (data is Map) {
+        final name = (data['name'] ?? '').toString().trim();
+        setState(() {
+          _adminName = name.isNotEmpty ? name : 'Admin';
+          _loadingMe = false;
+        });
+      } else {
+        setState(() {
+          _adminName = 'Admin';
+          _loadingMe = false;
+        });
+      }
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      // kalau token invalid / expired
+      if (e.response?.statusCode == 401) {
+        await TokenStorage.instance.clearToken();
+        if (!mounted) return;
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          Routes.login,
+          (route) => false,
+        );
+        return;
+      }
+
+      setState(() {
+        _adminName = 'Admin';
+        _loadingMe = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _adminName = 'Admin';
+        _loadingMe = false;
+      });
+    }
+  }
+
+  Future<void> _logout(BuildContext context) async {
+    final dio = ApiClient.instance.dio;
+
+    // tutup drawer dulu biar UX enak
     Navigator.pop(context);
+
+    try {
+      await dio.post('/logout'); // baseUrl sudah .../api
+    } on DioException {
+      // kalau error, tetap lanjut clear token
+    } catch (_) {
+      // ignore
+    } finally {
+      await TokenStorage.instance.clearToken();
+    }
+
+    if (!context.mounted) return;
     Navigator.pushNamedAndRemoveUntil(
       context,
-      Routes.dashboard,
+      Routes.login,
       (route) => false,
     );
   }
 
-  Future<void> _logout(BuildContext context) async {
-    // ambil root navigator (context yang aman / masih hidup)
-    final rootNav = Navigator.of(context, rootNavigator: true);
-
-    // tutup drawer
-    Navigator.pop(context);
-
-    // tampilkan dialog pakai rootNav.context (bukan context drawer)
-    final ok = await showDialog<bool>(
-      context: rootNav.context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Yakin ingin logout?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext, false),
-            child: const Text('Batal'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            onPressed: () => Navigator.pop(dialogContext, true),
-            child: const Text('Logout'),
-          ),
-        ],
-      ),
-    );
-
-    if (ok == true) {
-      rootNav.pushNamedAndRemoveUntil(
-        Routes.login,
-        (route) => false,
-      );
-    }
+  void _go(BuildContext context, String routeName) {
+    Navigator.pop(context); // tutup drawer
+    Navigator.pushNamed(context, routeName);
   }
 
   @override
   Widget build(BuildContext context) {
+    final nameText = _loadingMe ? 'Memuat...' : _adminName;
+
     return Drawer(
-      backgroundColor: const Color(0xFF366EBF),
-      child: SafeArea(
-        child: Column(
-          children: [
-            const SizedBox(height: 16),
-            const CircleAvatar(
-              radius: 34,
-              backgroundColor: Colors.white,
-              child: Icon(Icons.person, size: 42, color: AppTheme.navy),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Admin',
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-                fontWeight: FontWeight.w700,
+      child: Container(
+        color: const Color(0xFF3B74C7), // biru sidebar (biar mirip screenshot)
+        child: SafeArea(
+          child: Column(
+            children: [
+              const SizedBox(height: 14),
+              const CircleAvatar(
+                radius: 34,
+                backgroundColor: Colors.white,
+                child: Icon(Icons.person, size: 40, color: AppTheme.navy),
               ),
-            ),
-            const SizedBox(height: 12),
-            const Divider(color: Colors.white24),
+              const SizedBox(height: 10),
 
-            _DrawerItem(
-              icon: Icons.home_outlined,
-              label: 'Dashboard',
-              onTap: () => _goToDashboard(context),
-            ),
-            _DrawerItem(
-              icon: Icons.add_box_outlined,
-              label: 'Tambah resep baru',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.tambahResep);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.restaurant_menu,
-              label: 'Kelola resep',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.kelolaResep);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.mail_outline,
-              label: 'Masukan pengguna',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.masukanPengguna);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.group_outlined,
-              label: 'Kelola pengguna',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.kelolaPengguna);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.lock_outline,
-              label: 'Kelola akun admin',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.kelolaAkunAdmin);
-              },
-            ),
-            _DrawerItem(
-              icon: Icons.notifications_none,
-              label: 'Kelola notifikasi',
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.pushNamed(context, Routes.kelolaNotifikasi);
-              },
-            ),
+              // ✅ sekarang dinamis dari /me
+              Text(
+                nameText,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                ),
+              ),
 
-            const Spacer(),
+              const SizedBox(height: 14),
+              Divider(color: Colors.white.withOpacity(0.25), height: 1),
 
-            // ✅ Logout di bagian bawah
-            const Divider(color: Colors.white24),
-            _DrawerItem(
-              icon: Icons.logout,
-              label: 'Logout',
-              onTap: () => _logout(context),
-              color: Colors.redAccent,
-            ),
+              // ===== MENU =====
+              _item(
+                icon: Icons.home_outlined,
+                text: 'Dashboard',
+                onTap: () => _go(context, Routes.dashboard),
+              ),
+              _item(
+                icon: Icons.add_box_outlined,
+                text: 'Tambah resep baru',
+                onTap: () => _go(context, Routes.tambahResep),
+              ),
+              _item(
+                icon: Icons.restaurant_menu_outlined,
+                text: 'Kelola resep',
+                onTap: () => _go(context, Routes.kelolaResep),
+              ),
+              _item(
+                icon: Icons.mail_outline,
+                text: 'Masukan pengguna',
+                onTap: () => _go(context, Routes.masukanPengguna),
+              ),
+              _item(
+                icon: Icons.people_alt_outlined,
+                text: 'Kelola pengguna',
+                onTap: () => _go(context, Routes.kelolaPengguna),
+              ),
+              _item(
+                icon: Icons.lock_outline,
+                text: 'Kelola akun admin',
+                onTap: () => _go(context, Routes.kelolaAkunAdmin),
+              ),
+              _item(
+                icon: Icons.notifications_none,
+                text: 'Kelola notifikasi',
+                onTap: () => _go(context, Routes.kelolaNotifikasi),
+              ),
 
-            const Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
+              const Spacer(),
+              Divider(color: Colors.white.withOpacity(0.25), height: 1),
+
+              // ===== LOGOUT =====
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.redAccent),
+                title: const Text(
+                  'Logout',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                onTap: () => _logout(context),
+              ),
+
+              const SizedBox(height: 10),
+              const Text(
                 'Jago Masak',
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: Colors.white70,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
   }
-}
 
-class _DrawerItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-  final Color? color;
-
-  const _DrawerItem({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final c = color ?? Colors.white;
-
+  static Widget _item({
+    required IconData icon,
+    required String text,
+    required VoidCallback onTap,
+  }) {
     return ListTile(
-      leading: Icon(icon, color: c),
-      title: Text(label, style: TextStyle(color: c)),
+      leading: Icon(icon, color: Colors.white),
+      title: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
       onTap: onTap,
     );
   }
