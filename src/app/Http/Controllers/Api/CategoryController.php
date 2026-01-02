@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Models\Category;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller;
 
 class CategoryController extends Controller
@@ -11,7 +12,8 @@ class CategoryController extends Controller
     // public
     public function index()
     {
-        return Category::orderBy('name')->get();
+        $category = DB::connection('mysql')->table('categories')->get();
+        return response()->json($category, 200);
     }
 
     // admin

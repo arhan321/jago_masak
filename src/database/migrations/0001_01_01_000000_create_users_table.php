@@ -1,5 +1,6 @@
 <?php
 
+use PhpParser\Node\NullableType;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Database\Migrations\Migration;
@@ -18,6 +19,7 @@ return new class extends Migration
             $table->timestamp('email_verified_at')->nullable();
             $table->string('password');
             $table->enum('role', ['admin', 'user'])->default('user');
+            $table->string('nomor_telfon')->Nullable();
             $table->rememberToken();
             $table->timestamps();
         });

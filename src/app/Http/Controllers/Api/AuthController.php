@@ -15,12 +15,14 @@ class AuthController extends Controller
             'name' => ['required','string','max:255'],
             'email' => ['required','email','max:255','unique:users,email'],
             'password' => ['required','string','min:8'],
+            'nomor_telfon' => ['nullable','string','max:20'],
         ]);
 
         $user = User::create([
             'name' => $data['name'],
             'email' => $data['email'],
             'password' => $data['password'], // cast hashed di User model
+            'nomor_telfon' => $data['nomor_telfon'] ?? null,
             'role' => 'user',
         ]);
 
@@ -61,5 +63,35 @@ class AuthController extends Controller
     public function me(Request $request)
     {
         return response()->json($request->user());
+    }
+
+    public function totalPengguna()
+    {
+        $total = User::count();
+
+        // kalau kamu mau hanya user role "user" saja:
+        // $total = User::where('role', 'user')->count();
+
+        // kalau mau pecahan admin vs user:
+        $totalUser = User::where('role', 'user')->count();
+        $totalAdmin = User::where('role', 'admin')->count();
+
+        return response()->json([
+            'total_pengguna' => $total,
+            'total_user' => $totalUser,
+            'total_admin' => $totalAdmin,
+        ]);
+    }
+
+        public function users()
+    {
+        // tampilkan role user saja (kalau kamu mau include admin, hapus where)
+        $users = User::query()
+            ->where('role', 'user')
+            ->select(['id', 'name', 'email', 'role', 'nomor_telfon', 'created_at'])
+            ->latest()
+            ->get();
+
+        return response()->json($users);
     }
 }

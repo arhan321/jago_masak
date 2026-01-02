@@ -63,4 +63,8 @@ class Recipe extends Model
     {
         return $this->hasMany(Favorite::class);
     }
+    public function getPhotoUrlAttribute()
+    {
+        return $this->photo_path ? asset('storage/'.$this->photo_path) : null;
+    }
 }

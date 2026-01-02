@@ -22,6 +22,9 @@ Route::get('/recipes/{recipe}', [RecipeController::class, 'show']);
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/tags', [TagController::class, 'index']);
 
+Route::get('/total_pengguna', [AuthController::class, 'totalPengguna']);
+
+Route::get('/users', [AuthController::class, 'users']);
 /*
 |--------------------------------------------------------------------------
 | Protected Routes (auth)
@@ -52,6 +55,7 @@ Route::middleware('auth:sanctum')->group(function () {
     */
     Route::middleware('admin')->group(function () {
         // categories CRUD
+        Route::get('/cat', [CategoryController::class,'index']);
         Route::post('/categories', [CategoryController::class, 'store']);
         Route::put('/categories/{category}', [CategoryController::class, 'update']);
         Route::patch('/categories/{category}', [CategoryController::class, 'update']);
