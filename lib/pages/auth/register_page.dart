@@ -1,6 +1,9 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+
 import '../../core/app_theme.dart';
-import '../../core/routes.dart';
+import '../../core/config/app_config.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});
@@ -11,35 +14,111 @@ class RegisterPage extends StatefulWidget {
 
 class _RegisterPageState extends State<RegisterPage> {
   final _formKey = GlobalKey<FormState>();
+
   final _nameCtrl = TextEditingController();
-  final _phoneCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+  final _phoneCtrl = TextEditingController(); // ✅ nomor telfon
+  final _passwordCtrl = TextEditingController();
+
   bool _obscure = true;
   bool _loading = false;
 
+  final _client = http.Client();
+
   @override
   void dispose() {
+    _client.close();
     _nameCtrl.dispose();
-    _phoneCtrl.dispose();
     _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _phoneCtrl.dispose(); // ✅ dispose
+    _passwordCtrl.dispose();
     super.dispose();
+  }
+
+  Map<String, String> _headersJson() => {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      };
+
+  Map<String, dynamic> _decode(http.Response res) {
+    try {
+      final body = res.body.isEmpty ? '{}' : res.body;
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) return decoded;
+      return {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  /// Laravel sering balikin:
+  /// - {message: "..."}
+  /// - {errors: {field: ["..."]}}
+  String? _extractMessage(Map<String, dynamic> data) {
+    if (data['message'] is String) return data['message'] as String;
+
+    final errors = data['errors'];
+    if (errors is Map) {
+      final keys = errors.keys.toList();
+      if (keys.isNotEmpty) {
+        final v = errors[keys.first];
+        if (v is List && v.isNotEmpty) return v.first.toString();
+      }
+    }
+    return null;
   }
 
   Future<void> _handleRegister() async {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 700)); // dummy
-    setState(() => _loading = false);
+    try {
+      final res = await _client.post(
+        AppConfig.apiUri('/register'), // ✅ /api/register (tidak double)
+        headers: _headersJson(),
+        body: jsonEncode({
+          'name': _nameCtrl.text.trim(),
+          'email': _emailCtrl.text.trim(),
+          'nomor_telfon': _phoneCtrl.text.trim(), // ✅ ikut dikirim
+          'password': _passwordCtrl.text,
+        }),
+      );
 
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-          content: Text('Pendaftaran berhasil (dummy). Silakan login.')),
-    );
-    Navigator.pop(context); // kembali ke login
+      final data = _decode(res);
+
+      if (res.statusCode == 201 || res.statusCode == 200) {
+        if (!mounted) return;
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Pendaftaran berhasil. Silakan login.')),
+        );
+
+        Navigator.pop(context); // balik ke login
+        return;
+      }
+
+      throw Exception(
+        _extractMessage(data) ?? 'Register gagal (${res.statusCode})',
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  String? _validatePhone(String? v) {
+    final value = (v ?? '').trim();
+    if (value.isEmpty) return 'Nomor telfon wajib diisi';
+
+    // boleh 08..., +62..., atau angka saja
+    final normalized = value.replaceAll(' ', '').replaceAll('-', '');
+    final ok = RegExp(r'^\+?\d{8,15}$').hasMatch(normalized);
+    if (!ok) return 'Nomor telfon tidak valid';
+    return null;
   }
 
   @override
@@ -48,6 +127,7 @@ class _RegisterPageState extends State<RegisterPage> {
       backgroundColor: AppTheme.navy,
       appBar: AppBar(
         backgroundColor: AppTheme.navy,
+        foregroundColor: Colors.white,
         title: const Text('Daftar'),
       ),
       body: SafeArea(
@@ -63,61 +143,56 @@ class _RegisterPageState extends State<RegisterPage> {
             ),
             child: Form(
               key: _formKey,
-              child: ListView(
+              child: Column(
                 children: [
-                  const SizedBox(height: 8),
-                  const Text(
-                    'JAGO MASAK',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
                   TextFormField(
                     controller: _nameCtrl,
                     validator: (v) => (v == null || v.trim().isEmpty)
                         ? 'Nama wajib diisi'
                         : null,
-                    decoration:
-                        const InputDecoration(hintText: 'Nama Pengguna'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'No Telepon wajib diisi'
-                        : null,
-                    decoration: const InputDecoration(hintText: 'No Telepon'),
+                    decoration: const InputDecoration(hintText: 'Nama'),
                   ),
                   const SizedBox(height: 12),
                   TextFormField(
                     controller: _emailCtrl,
                     keyboardType: TextInputType.emailAddress,
                     validator: (v) {
-                      if (v == null || v.trim().isEmpty)
-                        return 'Email wajib diisi';
-                      if (!v.contains('@')) return 'Email tidak valid';
+                      final value = (v ?? '').trim();
+                      if (value.isEmpty) return 'Email wajib diisi';
+                      if (!value.contains('@')) return 'Email tidak valid';
                       return null;
                     },
-                    decoration: const InputDecoration(hintText: 'E-mail'),
+                    decoration: const InputDecoration(hintText: 'Email'),
                   ),
                   const SizedBox(height: 12),
+
+                  // ✅ Nomor Telfon
                   TextFormField(
-                    controller: _passCtrl,
+                    controller: _phoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    validator: _validatePhone,
+                    decoration: const InputDecoration(hintText: 'Nomor Telfon'),
+                  ),
+
+                  const SizedBox(height: 12),
+                  TextFormField(
+                    controller: _passwordCtrl,
                     obscureText: _obscure,
-                    validator: (v) => (v == null || v.length < 6)
-                        ? 'Password minimal 6 karakter'
-                        : null,
+                    validator: (v) {
+                      final value = v ?? '';
+                      if (value.isEmpty) return 'Password wajib diisi';
+                      if (value.length < 8) {
+                        return 'Password minimal 8 karakter';
+                      }
+                      return null;
+                    },
                     decoration: InputDecoration(
-                      hintText: 'Kata sandi',
+                      hintText: 'Password',
                       suffixIcon: IconButton(
                         onPressed: () => setState(() => _obscure = !_obscure),
                         icon: Icon(
-                            _obscure ? Icons.visibility : Icons.visibility_off),
+                          _obscure ? Icons.visibility : Icons.visibility_off,
+                        ),
                       ),
                     ),
                   ),
@@ -133,15 +208,6 @@ class _RegisterPageState extends State<RegisterPage> {
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Text('Daftar'),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextButton(
-                    onPressed: () =>
-                        Navigator.pushReplacementNamed(context, Routes.login),
-                    child: const Text(
-                      'Sudah punya akun? Masuk.',
-                      style: TextStyle(color: Colors.white),
                     ),
                   ),
                 ],

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/routes.dart';
 import '../../core/app_theme.dart';
-import '../../core/auth_mock.dart';
+import '../../services/auth_service.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -12,14 +12,15 @@ class LoginPage extends StatefulWidget {
 
 class _LoginPageState extends State<LoginPage> {
   final _formKey = GlobalKey<FormState>();
-  final _usernameCtrl = TextEditingController();
+  final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+
   bool _obscure = true;
   bool _loading = false;
 
   @override
   void dispose() {
-    _usernameCtrl.dispose();
+    _emailCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -28,35 +29,29 @@ class _LoginPageState extends State<LoginPage> {
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _loading = true);
+    try {
+      final auth = await AuthService.instance.login(
+        email: _emailCtrl.text.trim(),
+        password: _passwordCtrl.text,
+      );
 
-    final res = await AuthMock.login(
-      username: _usernameCtrl.text,
-      password: _passwordCtrl.text,
-    );
+      if (!mounted) return;
 
-    if (!mounted) return;
-    setState(() => _loading = false);
-
-    if (!res.ok) {
+      // redirect by role
+      final role = auth.user.role.toLowerCase();
+      if (role == 'admin') {
+        Navigator.pushReplacementNamed(context, Routes.dashboard);
+      } else {
+        // ✅ pakai userShell (karena routes.dart kamu tidak punya userHome)
+        Navigator.pushReplacementNamed(context, Routes.userShell);
+      }
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(res.message)),
+        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
       );
-      return;
-    }
-
-    // ✅ kondisi role
-    if (res.role == UserRole.admin) {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        Routes.dashboard,
-        (route) => false,
-      );
-    } else {
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        Routes.userShell,
-        (route) => false,
-      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -104,57 +99,45 @@ class _LoginPageState extends State<LoginPage> {
                     child: Column(
                       children: [
                         TextFormField(
-                          controller: _usernameCtrl,
-                          style: const TextStyle(color: Colors.black),
-                          validator: (v) => (v == null || v.trim().isEmpty)
-                              ? 'Nama pengguna wajib diisi'
-                              : null,
+                          controller: _emailCtrl,
+                          keyboardType: TextInputType.emailAddress,
+                          validator: (v) {
+                            final value = (v ?? '').trim();
+                            if (value.isEmpty) return 'Email wajib diisi';
+                            if (!value.contains('@'))
+                              return 'Email tidak valid';
+                            return null;
+                          },
                           decoration: const InputDecoration(
-                            hintText: 'Nama Pengguna',
+                            hintText: 'Email',
                           ),
                         ),
                         const SizedBox(height: 12),
                         TextFormField(
                           controller: _passwordCtrl,
                           obscureText: _obscure,
-                          validator: (v) => (v == null || v.length < 6)
-                              ? 'Password minimal 6 karakter'
-                              : null,
+                          validator: (v) {
+                            final value = v ?? '';
+                            if (value.isEmpty) return 'Password wajib diisi';
+                            if (value.length < 8) {
+                              return 'Password minimal 8 karakter';
+                            }
+                            return null;
+                          },
                           decoration: InputDecoration(
                             hintText: 'Masukkan Kata sandi',
                             suffixIcon: IconButton(
                               onPressed: () =>
                                   setState(() => _obscure = !_obscure),
-                              icon: Icon(_obscure
-                                  ? Icons.visibility
-                                  : Icons.visibility_off),
+                              icon: Icon(
+                                _obscure
+                                    ? Icons.visibility
+                                    : Icons.visibility_off,
+                              ),
                             ),
                           ),
                         ),
-
-                        const SizedBox(height: 10),
-
-                        // ✅ info login dummy biar enak dites
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: Colors.white.withOpacity(0.12)),
-                          ),
-                          child: const Text(
-                            'Login dummy:\n'
-                            '• admin / admin123 (Admin)\n'
-                            '• user / user123 (User)',
-                            style:
-                                TextStyle(color: Colors.white70, fontSize: 12),
-                          ),
-                        ),
-
-                        const SizedBox(height: 14),
-
+                        const SizedBox(height: 18),
                         SizedBox(
                           width: double.infinity,
                           child: ElevatedButton(
@@ -181,6 +164,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const Spacer(),
                         TextButton(
+                          // ✅ skip diarahkan ke userShell
                           onPressed: () => Navigator.pushReplacementNamed(
                             context,
                             Routes.userShell,
