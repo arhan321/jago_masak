@@ -17,11 +17,11 @@ class UserHomePage extends StatefulWidget {
 
 class _UserHomePageState extends State<UserHomePage> {
   final db = MockDb.instance;
-
   final Set<int> _hiddenRecipeIds = {};
 
   Dio get _dio => ApiClient.instance.dio;
 
+  int? _meId;
   String _userName = '...';
   bool _loadingMe = true;
 
@@ -29,22 +29,30 @@ class _UserHomePageState extends State<UserHomePage> {
   String? _errorRecipes;
   List<_ApiRecipeCard> _recipes = [];
 
+  // ✅ favorites state dari backend (yang menentukan icon hati)
+  bool _loadingFavs = true;
+  Set<int> _favoriteIds = {};
+
   @override
   void initState() {
     super.initState();
-    _fetchMe();
-    _fetchRecipes();
+    _init();
   }
 
-  /// ✅ Pull-to-refresh handler
-  Future<void> _onRefresh() async {
-    // reset yang hidden biar kalau gambar sudah bener bisa muncul lagi
-    _hiddenRecipeIds.clear();
-
-    // refresh data user + resep
+  Future<void> _init() async {
+    await _fetchMe();
     await Future.wait([
-      _fetchMe(),
       _fetchRecipes(),
+      _fetchFavoritesIds(), // ✅ penting
+    ]);
+  }
+
+  Future<void> _onRefresh() async {
+    _hiddenRecipeIds.clear();
+    await _fetchMe();
+    await Future.wait([
+      _fetchRecipes(),
+      _fetchFavoritesIds(),
     ]);
   }
 
@@ -53,13 +61,21 @@ class _UserHomePageState extends State<UserHomePage> {
     setState(() => _loadingMe = true);
 
     try {
-      final res = await _dio.get('/me'); // ✅ auth:sanctum
+      final res = await _dio.get('/me'); // auth:sanctum
       final data = res.data;
 
       if (data is Map) {
         final name = (data['name'] ?? '').toString().trim();
+
+        final rawId = data['id'];
+        int? id;
+        if (rawId is int) id = rawId;
+        if (rawId is String) id = int.tryParse(rawId);
+        if (rawId is num) id = rawId.toInt();
+
         if (!mounted) return;
         setState(() {
+          _meId = id;
           _userName = name.isEmpty ? 'User' : name;
           _loadingMe = false;
         });
@@ -68,6 +84,7 @@ class _UserHomePageState extends State<UserHomePage> {
 
       if (!mounted) return;
       setState(() {
+        _meId = null;
         _userName = 'User';
         _loadingMe = false;
       });
@@ -80,12 +97,14 @@ class _UserHomePageState extends State<UserHomePage> {
       }
 
       setState(() {
+        _meId = null;
         _userName = 'User';
         _loadingMe = false;
       });
     } catch (_) {
       if (!mounted) return;
       setState(() {
+        _meId = null;
         _userName = 'User';
         _loadingMe = false;
       });
@@ -135,7 +154,6 @@ class _UserHomePageState extends State<UserHomePage> {
         throw Exception('Format response /recipes tidak sesuai');
       }
 
-      // ambil 6 rekomendasi
       parsed = parsed.take(6).toList();
 
       if (!mounted) return;
@@ -166,11 +184,136 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
+  /// ✅ ambil daftar favorite dari backend untuk status icon
+  Future<void> _fetchFavoritesIds() async {
+    if (!mounted) return;
+    setState(() => _loadingFavs = true);
+
+    try {
+      final res = await _dio.get('/me/favorites'); // auth:sanctum
+      final data = res.data;
+
+      final Set<int> ids = {};
+
+      // controller: { success:true, data:[...] }
+      if (data is Map && data['data'] is List) {
+        for (final e in List.from(data['data'] as List)) {
+          if (e is Map) {
+            final raw = e['id'];
+            int? id;
+            if (raw is int) id = raw;
+            if (raw is String) id = int.tryParse(raw);
+            if (raw is num) id = raw.toInt();
+            if (id != null) ids.add(id);
+          }
+        }
+      } else if (data is List) {
+        for (final e in data) {
+          if (e is Map) {
+            final raw = e['id'];
+            int? id;
+            if (raw is int) id = raw;
+            if (raw is String) id = int.tryParse(raw);
+            if (raw is num) id = raw.toInt();
+            if (id != null) ids.add(id);
+          }
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _favoriteIds = ids;
+        _loadingFavs = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      if (e.response?.statusCode == 401) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+        return;
+      }
+
+      // kalau error, jangan bikin page crash — cukup anggap kosong
+      setState(() {
+        _favoriteIds = {};
+        _loadingFavs = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _favoriteIds = {};
+        _loadingFavs = false;
+      });
+    }
+  }
+
+  /// ✅ toggle favorite ke backend
+  Future<void> _toggleFavorite(_ApiRecipeCard r) async {
+    // kalau belum punya session, lempar login
+    if (_meId == null) {
+      Navigator.pushNamedAndRemoveUntil(context, Routes.login, (x) => false);
+      return;
+    }
+
+    final isFav = _favoriteIds.contains(r.id);
+
+    // optimistic update biar UI responsif
+    setState(() {
+      if (isFav) {
+        _favoriteIds.remove(r.id);
+      } else {
+        _favoriteIds.add(r.id);
+      }
+    });
+
+    try {
+      if (isFav) {
+        await _dio.delete('/recipes/${r.id}/favorite');
+      } else {
+        // kalau backend kamu sudah pakai $request->user() di store,
+        // kamu bisa kirim body kosong. Kalau masih minta user_id, kirim ini:
+        await _dio.post('/recipes/${r.id}/favorite', data: {'user_id': _meId});
+      }
+    } on DioException catch (e) {
+      // rollback kalau gagal
+      if (!mounted) return;
+      setState(() {
+        if (isFav) {
+          _favoriteIds.add(r.id);
+        } else {
+          _favoriteIds.remove(r.id);
+        }
+      });
+
+      if (e.response?.statusCode == 401) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (x) => false);
+        return;
+      }
+
+      final msg = (e.response?.data is Map)
+          ? ((e.response?.data['message'] ?? 'Gagal update favorit').toString())
+          : 'Gagal update favorit';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } catch (_) {
+      // rollback
+      if (!mounted) return;
+      setState(() {
+        if (isFav) {
+          _favoriteIds.add(r.id);
+        } else {
+          _favoriteIds.remove(r.id);
+        }
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Gagal update favorit')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final helloName = _loadingMe ? '...' : _userName;
 
-    // ambil data, tapi skip yang sudah error image
     final recipes =
         _recipes.where((r) => !_hiddenRecipeIds.contains(r.id)).toList();
 
@@ -185,15 +328,11 @@ class _UserHomePageState extends State<UserHomePage> {
             ),
           ],
         ),
-
-        // ✅ RefreshIndicator di sini
         body: RefreshIndicator(
           color: AppTheme.navy,
           onRefresh: _onRefresh,
           child: Padding(
             padding: const EdgeInsets.all(16),
-
-            // ✅ Important: AlwaysScrollableScrollPhysics biar bisa refresh walau konten sedikit
             child: ListView(
               physics: const AlwaysScrollableScrollPhysics(),
               children: [
@@ -225,18 +364,6 @@ class _UserHomePageState extends State<UserHomePage> {
                     ),
                   ),
                 ),
-                // const SizedBox(height: 14),
-                // const Text('Masak Seadanya',
-                //     style: TextStyle(fontWeight: FontWeight.w900)),
-                // const SizedBox(height: 4),
-                // InkWell(
-                //   onTap: () =>
-                //       Navigator.pushNamed(context, Routes.userMasakSeadanya),
-                //   child: const Text(
-                //     'Temukan resep cepat dan seadanya!',
-                //     style: TextStyle(color: AppTheme.navy, fontSize: 12),
-                //   ),
-                // ),
                 const SizedBox(height: 14),
                 const Text('Rekomendasi Untuk Anda',
                     style: TextStyle(fontWeight: FontWeight.w900)),
@@ -245,7 +372,8 @@ class _UserHomePageState extends State<UserHomePage> {
                   const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
-                        child: CircularProgressIndicator(strokeWidth: 2)),
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   )
                 else if (_errorRecipes != null)
                   Container(
@@ -296,7 +424,10 @@ class _UserHomePageState extends State<UserHomePage> {
                     ),
                     itemBuilder: (_, i) {
                       final r = recipes[i];
-                      final fav = db.isFavorite(r.id);
+
+                      // ✅ icon pakai backend favorites
+                      final fav = _favoriteIds.contains(r.id);
+                      final favLoading = _loadingFavs; // optional
 
                       return InkWell(
                         onTap: () {
@@ -318,8 +449,6 @@ class _UserHomePageState extends State<UserHomePage> {
                                   UserRecipeDetailPage(recipe: recipeModel),
                             ),
                           );
-
-                          setState(() {});
                         },
                         child: Card(
                           clipBehavior: Clip.antiAlias,
@@ -354,15 +483,16 @@ class _UserHomePageState extends State<UserHomePage> {
                                   },
                                 ),
                               ),
+
+                              // ✅ tombol favorite ke API
                               Positioned(
                                 right: 8,
                                 top: 8,
                                 child: GestureDetector(
                                   behavior: HitTestBehavior.opaque,
-                                  onTap: () {
-                                    db.toggleFavorite(r.id);
-                                    setState(() {});
-                                  },
+                                  onTap: favLoading
+                                      ? null
+                                      : () => _toggleFavorite(r),
                                   child: Container(
                                     padding: const EdgeInsets.all(6),
                                     decoration: BoxDecoration(
@@ -379,6 +509,7 @@ class _UserHomePageState extends State<UserHomePage> {
                                   ),
                                 ),
                               ),
+
                               Positioned(
                                 left: 0,
                                 right: 0,
