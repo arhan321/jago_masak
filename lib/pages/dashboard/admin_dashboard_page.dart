@@ -37,7 +37,7 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     _fetchMe();
     _fetchTotalPengguna();
     _fetchTotalResep();
-    _fetchTotalSaran(); // ✅ baru
+    _fetchTotalSaran();
   }
 
   Future<void> _fetchMe() async {
@@ -142,7 +142,6 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         return;
       }
 
-      // kalau bukan 404, stop aja
       if (!mounted) return;
       if (e.response?.statusCode != 404) {
         setState(() => _loadingTotalResep = false);
@@ -190,14 +189,13 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
     }
   }
 
-  /// ✅ Total Saran (Masukan Pengguna)
-  /// 1) GET /total_saran -> { total_saran: 12 }
-  /// 2) fallback GET /sarans -> { success, data:[...] } => data.length
+  /// Total Saran:
+  /// 1) GET /total_saran (kalau ada)
+  /// 2) fallback GET /sarans => data.length
   Future<void> _fetchTotalSaran() async {
     if (!mounted) return;
     setState(() => _loadingTotalSaran = true);
 
-    // 1) coba endpoint count dulu
     try {
       final res = await _dio.get('/total_saran');
       final data = res.data;
@@ -225,23 +223,18 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         return;
       }
 
-      // kalau bukan 404, stop saja
       if (e.response?.statusCode != 404) {
         setState(() => _loadingTotalSaran = false);
         return;
       }
-      // kalau 404 -> fallback ke /sarans
     } catch (_) {
       // ignore, fallback
     }
 
-    // 2) fallback: /sarans
     try {
       final res = await _dio.get('/sarans');
       final data = res.data;
 
-      // bentuk dari controller kamu:
-      // { success: true, message: "...", data: [ ... ] }
       if (data is Map && data['data'] is List) {
         final list = List.from(data['data'] as List);
         if (!mounted) return;
@@ -288,6 +281,9 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
         ? '...'
         : (_totalSaran?.toString() ?? '${db.totalFeedback}');
 
+    // ✅ sementara: rekomendasi = total resep
+    final totalRekomendasiText = totalResepText;
+
     final w = MediaQuery.of(context).size.width;
     final ratio = w < 380 ? 0.82 : 0.92;
 
@@ -329,13 +325,12 @@ class _AdminDashboardPageState extends State<AdminDashboardPage> {
                   DashboardCard(
                     icon: Icons.chat_bubble_outline,
                     title: 'Total\nMasukan\nPengguna',
-                    value: totalSaranText, // ✅ sekarang dari API
+                    value: totalSaranText,
                   ),
                   DashboardCard(
                     icon: Icons.star_outline,
                     title: 'Rekomendasi\nResep',
-                    value:
-                        '${db.totalRecommendations}', // nanti bisa nyusul API
+                    value: totalRekomendasiText,
                   ),
                 ],
               ),
