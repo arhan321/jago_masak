@@ -225,18 +225,18 @@ class _UserHomePageState extends State<UserHomePage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 14),
-                const Text('Masak Seadanya',
-                    style: TextStyle(fontWeight: FontWeight.w900)),
-                const SizedBox(height: 4),
-                InkWell(
-                  onTap: () =>
-                      Navigator.pushNamed(context, Routes.userMasakSeadanya),
-                  child: const Text(
-                    'Temukan resep cepat dan seadanya!',
-                    style: TextStyle(color: AppTheme.navy, fontSize: 12),
-                  ),
-                ),
+                // const SizedBox(height: 14),
+                // const Text('Masak Seadanya',
+                //     style: TextStyle(fontWeight: FontWeight.w900)),
+                // const SizedBox(height: 4),
+                // InkWell(
+                //   onTap: () =>
+                //       Navigator.pushNamed(context, Routes.userMasakSeadanya),
+                //   child: const Text(
+                //     'Temukan resep cepat dan seadanya!',
+                //     style: TextStyle(color: AppTheme.navy, fontSize: 12),
+                //   ),
+                // ),
                 const SizedBox(height: 14),
                 const Text('Rekomendasi Untuk Anda',
                     style: TextStyle(fontWeight: FontWeight.w900)),
