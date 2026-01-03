@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
-import '../../../core/mock_db.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/routes.dart';
 import '../../../models/recipe.dart';
@@ -16,7 +17,6 @@ class UserHomePage extends StatefulWidget {
 }
 
 class _UserHomePageState extends State<UserHomePage> {
-  final db = MockDb.instance;
   final Set<int> _hiddenRecipeIds = {};
 
   Dio get _dio => ApiClient.instance.dio;
@@ -32,6 +32,9 @@ class _UserHomePageState extends State<UserHomePage> {
   // ✅ favorites state dari backend (yang menentukan icon hati)
   bool _loadingFavs = true;
   Set<int> _favoriteIds = {};
+
+  // ✅ anti double spam post history kalau user tap cepat
+  final Set<int> _postingHistory = {};
 
   @override
   void initState() {
@@ -270,8 +273,6 @@ class _UserHomePageState extends State<UserHomePage> {
       if (isFav) {
         await _dio.delete('/recipes/${r.id}/favorite');
       } else {
-        // kalau backend kamu sudah pakai $request->user() di store,
-        // kamu bisa kirim body kosong. Kalau masih minta user_id, kirim ini:
         await _dio.post('/recipes/${r.id}/favorite', data: {'user_id': _meId});
       }
     } on DioException catch (e) {
@@ -307,6 +308,32 @@ class _UserHomePageState extends State<UserHomePage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Gagal update favorit')),
       );
+    }
+  }
+
+  /// ✅ POST history ketika user membuka detail resep
+  Future<void> _recordHistory(int recipeId) async {
+    final uid = _meId;
+    if (uid == null) return;
+
+    if (_postingHistory.contains(recipeId)) return;
+    _postingHistory.add(recipeId);
+
+    try {
+      await _dio.post(
+        '/recipes/$recipeId/history',
+        data: {'user_id': uid},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401 && mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+        return;
+      }
+      // selain itu: ignore (biar UX tidak terganggu)
+    } catch (_) {
+      // ignore
+    } finally {
+      _postingHistory.remove(recipeId);
     }
   }
 
@@ -425,13 +452,13 @@ class _UserHomePageState extends State<UserHomePage> {
                     itemBuilder: (_, i) {
                       final r = recipes[i];
 
-                      // ✅ icon pakai backend favorites
                       final fav = _favoriteIds.contains(r.id);
-                      final favLoading = _loadingFavs; // optional
+                      final favLoading = _loadingFavs;
 
                       return InkWell(
                         onTap: () {
-                          db.addToHistory(r.id);
+                          // ✅ post history (tanpa menghambat navigasi)
+                          unawaited(_recordHistory(r.id));
 
                           final recipeModel = Recipe(
                             id: r.id,

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
@@ -23,6 +25,8 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
   bool _loading = true;
   String? _error;
   List<_ApiHistoryItem> _items = [];
+
+  final Set<int> _postingHistory = {};
 
   @override
   void initState() {
@@ -109,7 +113,6 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
 
       List<_ApiHistoryItem> parsed = [];
 
-      // controller kamu: { success:true, data:[...] }
       if (data is Map && data['data'] is List) {
         final list = List.from(data['data'] as List);
         parsed = list
@@ -161,6 +164,30 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
         _loading = false;
         _error = e.toString().replaceFirst('Exception: ', '');
       });
+    }
+  }
+
+  Future<void> _recordHistory(int recipeId) async {
+    final uid = _meId;
+    if (uid == null) return;
+
+    if (_postingHistory.contains(recipeId)) return;
+    _postingHistory.add(recipeId);
+
+    try {
+      await _dio.post(
+        '/recipes/$recipeId/history',
+        data: {'user_id': uid},
+      );
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401 && mounted) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+        return;
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      _postingHistory.remove(recipeId);
     }
   }
 
@@ -322,8 +349,10 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
                                           maxLines: 1,
                                           overflow: TextOverflow.ellipsis,
                                         ),
-                                        onTap: () {
-                                          // buka detail pakai model Recipe yang kamu punya
+                                        onTap: () async {
+                                          // ✅ buka detail + record view lagi
+                                          unawaited(_recordHistory(h.recipeId));
+
                                           final recipeModel = Recipe(
                                             id: r.id,
                                             title: r.title,
@@ -333,7 +362,7 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
                                             imageUrl: r.imageUrl,
                                           );
 
-                                          Navigator.push(
+                                          await Navigator.push(
                                             context,
                                             MaterialPageRoute(
                                               builder: (_) =>
@@ -341,6 +370,11 @@ class _UserHistoryPageState extends State<UserHistoryPage> {
                                                       recipe: recipeModel),
                                             ),
                                           );
+
+                                          // refresh supaya view_count & urutan last_viewed_at update
+                                          if (mounted) {
+                                            await _fetchHistory();
+                                          }
                                         },
                                         trailing: IconButton(
                                           tooltip: 'Hapus riwayat',
@@ -428,7 +462,6 @@ class _ApiRecipeLite {
     Map<String, dynamic> json, {
     required String baseUrl,
   }) {
-    // category relasi: { category: { name: ... } }
     String catName = '';
     if (json['category'] is Map) {
       final c = Map<String, dynamic>.from(json['category'] as Map);
@@ -457,8 +490,9 @@ class _ApiRecipeLite {
 
   static String _photoUrlFromPath(String baseUrl, String photoPath) {
     if (photoPath.trim().isEmpty) return '';
-    if (photoPath.startsWith('http://') || photoPath.startsWith('https://'))
+    if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
       return photoPath;
+    }
 
     final root = baseUrl.endsWith('/api')
         ? baseUrl.substring(0, baseUrl.length - 4)
