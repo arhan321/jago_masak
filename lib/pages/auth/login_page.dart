@@ -37,12 +37,10 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // redirect by role
       final role = auth.user.role.toLowerCase();
       if (role == 'admin') {
         Navigator.pushReplacementNamed(context, Routes.dashboard);
       } else {
-        // ✅ pakai userShell (karena routes.dart kamu tidak punya userHome)
         Navigator.pushReplacementNamed(context, Routes.userShell);
       }
     } catch (e) {
@@ -64,18 +62,24 @@ class _LoginPageState extends State<LoginPage> {
           padding: const EdgeInsets.all(18),
           child: Column(
             children: [
-              const SizedBox(height: 36),
-              const Text(
-                'JAGO\nMASAK',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 36,
-                  fontWeight: FontWeight.w900,
-                  height: 1.0,
+              const SizedBox(height: 26),
+
+              // ✅ LOGO (sesuai figma)
+              Image.asset(
+                'assets/logo_jagomasak2.png',
+                height: 180,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  height: 140,
+                  child: Center(
+                    child: Icon(Icons.image_not_supported,
+                        color: Colors.white70, size: 40),
+                  ),
                 ),
               ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 10),
+
               const Text(
                 'Masuk',
                 style: TextStyle(
@@ -85,6 +89,7 @@ class _LoginPageState extends State<LoginPage> {
                 ),
               ),
               const SizedBox(height: 18),
+
               Expanded(
                 child: Container(
                   width: double.infinity,
@@ -163,17 +168,6 @@ class _LoginPageState extends State<LoginPage> {
                           ),
                         ),
                         const Spacer(),
-                        // TextButton(
-                        //   // ✅ skip diarahkan ke userShell
-                        //   onPressed: () => Navigator.pushReplacementNamed(
-                        //     context,
-                        //     Routes.userShell,
-                        //   ),
-                        //   child: const Text(
-                        //     'Later (skip)',
-                        //     style: TextStyle(color: Colors.white70),
-                        //   ),
-                        // ),
                       ],
                     ),
                   ),

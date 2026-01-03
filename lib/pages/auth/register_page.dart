@@ -30,7 +30,7 @@ class _RegisterPageState extends State<RegisterPage> {
     _client.close();
     _nameCtrl.dispose();
     _emailCtrl.dispose();
-    _phoneCtrl.dispose(); // ✅ dispose
+    _phoneCtrl.dispose();
     _passwordCtrl.dispose();
     super.dispose();
   }
@@ -51,9 +51,6 @@ class _RegisterPageState extends State<RegisterPage> {
     }
   }
 
-  /// Laravel sering balikin:
-  /// - {message: "..."}
-  /// - {errors: {field: ["..."]}}
   String? _extractMessage(Map<String, dynamic> data) {
     if (data['message'] is String) return data['message'] as String;
 
@@ -74,12 +71,12 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _loading = true);
     try {
       final res = await _client.post(
-        AppConfig.apiUri('/register'), // ✅ /api/register (tidak double)
+        AppConfig.apiUri('/register'),
         headers: _headersJson(),
         body: jsonEncode({
           'name': _nameCtrl.text.trim(),
           'email': _emailCtrl.text.trim(),
-          'nomor_telfon': _phoneCtrl.text.trim(), // ✅ ikut dikirim
+          'nomor_telfon': _phoneCtrl.text.trim(),
           'password': _passwordCtrl.text,
         }),
       );
@@ -93,7 +90,7 @@ class _RegisterPageState extends State<RegisterPage> {
           const SnackBar(content: Text('Pendaftaran berhasil. Silakan login.')),
         );
 
-        Navigator.pop(context); // balik ke login
+        Navigator.pop(context);
         return;
       }
 
@@ -114,7 +111,6 @@ class _RegisterPageState extends State<RegisterPage> {
     final value = (v ?? '').trim();
     if (value.isEmpty) return 'Nomor telfon wajib diisi';
 
-    // boleh 08..., +62..., atau angka saja
     final normalized = value.replaceAll(' ', '').replaceAll('-', '');
     final ok = RegExp(r'^\+?\d{8,15}$').hasMatch(normalized);
     if (!ok) return 'Nomor telfon tidak valid';
@@ -133,86 +129,119 @@ class _RegisterPageState extends State<RegisterPage> {
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(18),
-          child: Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.08),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.15)),
-            ),
-            child: Form(
-              key: _formKey,
-              child: Column(
-                children: [
-                  TextFormField(
-                    controller: _nameCtrl,
-                    validator: (v) => (v == null || v.trim().isEmpty)
-                        ? 'Nama wajib diisi'
-                        : null,
-                    decoration: const InputDecoration(hintText: 'Nama'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _emailCtrl,
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (v) {
-                      final value = (v ?? '').trim();
-                      if (value.isEmpty) return 'Email wajib diisi';
-                      if (!value.contains('@')) return 'Email tidak valid';
-                      return null;
-                    },
-                    decoration: const InputDecoration(hintText: 'Email'),
-                  ),
-                  const SizedBox(height: 12),
+          child: Column(
+            children: [
+              const SizedBox(height: 10),
 
-                  // ✅ Nomor Telfon
-                  TextFormField(
-                    controller: _phoneCtrl,
-                    keyboardType: TextInputType.phone,
-                    validator: _validatePhone,
-                    decoration: const InputDecoration(hintText: 'Nomor Telfon'),
+              // ✅ LOGO di atas (seperti login)
+              Image.asset(
+                'assets/logo_jagomasak2.png',
+                height: 180,
+                fit: BoxFit.contain,
+                errorBuilder: (_, __, ___) => const SizedBox(
+                  height: 120,
+                  child: Center(
+                    child: Icon(Icons.image_not_supported,
+                        color: Colors.white70, size: 40),
                   ),
+                ),
+              ),
 
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _passwordCtrl,
-                    obscureText: _obscure,
-                    validator: (v) {
-                      final value = v ?? '';
-                      if (value.isEmpty) return 'Password wajib diisi';
-                      if (value.length < 8) {
-                        return 'Password minimal 8 karakter';
-                      }
-                      return null;
-                    },
-                    decoration: InputDecoration(
-                      hintText: 'Password',
-                      suffixIcon: IconButton(
-                        onPressed: () => setState(() => _obscure = !_obscure),
-                        icon: Icon(
-                          _obscure ? Icons.visibility : Icons.visibility_off,
-                        ),
+              const SizedBox(height: 14),
+
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: Colors.white.withOpacity(0.15)),
+                  ),
+                  child: SingleChildScrollView(
+                    child: Form(
+                      key: _formKey,
+                      child: Column(
+                        children: [
+                          TextFormField(
+                            controller: _nameCtrl,
+                            validator: (v) => (v == null || v.trim().isEmpty)
+                                ? 'Nama wajib diisi'
+                                : null,
+                            decoration: const InputDecoration(hintText: 'Nama'),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _emailCtrl,
+                            keyboardType: TextInputType.emailAddress,
+                            validator: (v) {
+                              final value = (v ?? '').trim();
+                              if (value.isEmpty) return 'Email wajib diisi';
+                              if (!value.contains('@'))
+                                return 'Email tidak valid';
+                              return null;
+                            },
+                            decoration:
+                                const InputDecoration(hintText: 'Email'),
+                          ),
+                          const SizedBox(height: 12),
+
+                          // ✅ Nomor Telfon
+                          TextFormField(
+                            controller: _phoneCtrl,
+                            keyboardType: TextInputType.phone,
+                            validator: _validatePhone,
+                            decoration:
+                                const InputDecoration(hintText: 'Nomor Telfon'),
+                          ),
+
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _passwordCtrl,
+                            obscureText: _obscure,
+                            validator: (v) {
+                              final value = v ?? '';
+                              if (value.isEmpty) return 'Password wajib diisi';
+                              if (value.length < 8) {
+                                return 'Password minimal 8 karakter';
+                              }
+                              return null;
+                            },
+                            decoration: InputDecoration(
+                              hintText: 'Password',
+                              suffixIcon: IconButton(
+                                onPressed: () =>
+                                    setState(() => _obscure = !_obscure),
+                                icon: Icon(
+                                  _obscure
+                                      ? Icons.visibility
+                                      : Icons.visibility_off,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 18),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: _loading ? null : _handleRegister,
+                              child: _loading
+                                  ? const SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Text('Daftar'),
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 18),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      onPressed: _loading ? null : _handleRegister,
-                      child: _loading
-                          ? const SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Text('Daftar'),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+            ],
           ),
         ),
       ),
