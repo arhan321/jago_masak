@@ -2,12 +2,14 @@ import 'dart:async';
 
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/app_theme.dart';
 import '../../../core/network/api_client.dart';
 import '../../../core/routes.dart';
 import '../../../models/recipe.dart';
 import '../../../users/recipe/user_recipe_detail_page.dart';
+import '../../../users/notifications/user_notifications_page.dart';
 
 class UserHomePage extends StatefulWidget {
   const UserHomePage({super.key});
@@ -29,12 +31,21 @@ class _UserHomePageState extends State<UserHomePage> {
   String? _errorRecipes;
   List<_ApiRecipeCard> _recipes = [];
 
-  // ✅ favorites state dari backend (yang menentukan icon hati)
   bool _loadingFavs = true;
   Set<int> _favoriteIds = {};
 
-  // ✅ anti double spam post history kalau user tap cepat
   final Set<int> _postingHistory = {};
+
+  // =========================
+  // NOTIFICATION BADGE LOGIC
+  // =========================
+  static const String _kLastSeenNotifKey = 'last_seen_notification_created_at';
+
+  Timer? _notifTimer;
+  bool _loadingNotif = false;
+  int _unreadNotifCount = 0;
+  DateTime? _lastSeenNotifAt;
+  DateTime? _latestNotifAt;
 
   @override
   void initState() {
@@ -42,11 +53,18 @@ class _UserHomePageState extends State<UserHomePage> {
     _init();
   }
 
+  @override
+  void dispose() {
+    _notifTimer?.cancel();
+    super.dispose();
+  }
+
   Future<void> _init() async {
     await _fetchMe();
     await Future.wait([
       _fetchRecipes(),
-      _fetchFavoritesIds(), // ✅ penting
+      _fetchFavoritesIds(),
+      _initNotifBadge(),
     ]);
   }
 
@@ -56,15 +74,182 @@ class _UserHomePageState extends State<UserHomePage> {
     await Future.wait([
       _fetchRecipes(),
       _fetchFavoritesIds(),
+      _checkNotifications(),
     ]);
   }
+
+  Future<void> _initNotifBadge() async {
+    final prefs = await SharedPreferences.getInstance();
+    final lastSeenIso = prefs.getString(_kLastSeenNotifKey);
+    _lastSeenNotifAt =
+        (lastSeenIso == null) ? null : DateTime.tryParse(lastSeenIso);
+
+    await _checkNotifications();
+
+    _notifTimer?.cancel();
+    _notifTimer = Timer.periodic(const Duration(seconds: 20), (_) {
+      _checkNotifications();
+    });
+  }
+
+  Future<void> _checkNotifications() async {
+    if (_loadingNotif) return;
+    _loadingNotif = true;
+
+    try {
+      final res = await _dio.get('/notifications');
+      final data = res.data;
+
+      List<Map<String, dynamic>> list = [];
+      if (data is List) {
+        list = data
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } else if (data is Map && data['data'] is List) {
+        list = List.from(data['data'] as List)
+            .whereType<Map>()
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+      } else {
+        if (mounted) setState(() => _unreadNotifCount = 0);
+        return;
+      }
+
+      DateTime? latest;
+      int unread = 0;
+
+      for (final n in list) {
+        final createdAtIso = (n['created_at'] ?? '').toString();
+        final createdAt = DateTime.tryParse(createdAtIso);
+        if (createdAt == null) continue;
+
+        if (latest == null || createdAt.isAfter(latest)) {
+          latest = createdAt;
+        }
+
+        final lastSeen = _lastSeenNotifAt;
+        if (lastSeen == null) {
+          unread++;
+        } else if (createdAt.isAfter(lastSeen)) {
+          unread++;
+        }
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _latestNotifAt = latest;
+        _unreadNotifCount = unread;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+      if (e.response?.statusCode == 401) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+        return;
+      }
+    } catch (_) {
+      // ignore
+    } finally {
+      _loadingNotif = false;
+    }
+  }
+
+  Future<void> _markNotificationsAsRead() async {
+    final latest = _latestNotifAt;
+    if (latest == null) return;
+
+    _lastSeenNotifAt = latest;
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kLastSeenNotifKey, latest.toIso8601String());
+
+    if (!mounted) return;
+    setState(() {
+      _unreadNotifCount = 0;
+    });
+  }
+
+  Future<void> _openNotifications() async {
+    await _markNotificationsAsRead();
+
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const UserNotificationsPage()),
+    );
+
+    if (result is String) {
+      final dt = DateTime.tryParse(result);
+      if (dt != null) {
+        _lastSeenNotifAt = dt;
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString(_kLastSeenNotifKey, dt.toIso8601String());
+      }
+    }
+
+    await _checkNotifications();
+  }
+
+  // ✅ FIX: badge tidak menghalangi klik
+  Widget _notifActionButton() {
+    final showBadge = _unreadNotifCount > 0;
+    final badgeText = _unreadNotifCount > 9 ? '9+' : '$_unreadNotifCount';
+
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: _openNotifications,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Icon(Icons.notifications_none),
+            ),
+            if (showBadge)
+              Positioned(
+                right: 2,
+                top: 2,
+                child: IgnorePointer(
+                  ignoring: true, // ✅ kunci utama
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(color: Colors.white, width: 1.5),
+                    ),
+                    constraints:
+                        const BoxConstraints(minWidth: 18, minHeight: 18),
+                    child: Text(
+                      badgeText,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // =========================
+  // EXISTING CODE (ME/RECIPES/FAV/HISTORY)
+  // =========================
 
   Future<void> _fetchMe() async {
     if (!mounted) return;
     setState(() => _loadingMe = true);
 
     try {
-      final res = await _dio.get('/me'); // auth:sanctum
+      final res = await _dio.get('/me');
       final data = res.data;
 
       if (data is Map) {
@@ -187,18 +372,16 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
-  /// ✅ ambil daftar favorite dari backend untuk status icon
   Future<void> _fetchFavoritesIds() async {
     if (!mounted) return;
     setState(() => _loadingFavs = true);
 
     try {
-      final res = await _dio.get('/me/favorites'); // auth:sanctum
+      final res = await _dio.get('/me/favorites');
       final data = res.data;
 
       final Set<int> ids = {};
 
-      // controller: { success:true, data:[...] }
       if (data is Map && data['data'] is List) {
         for (final e in List.from(data['data'] as List)) {
           if (e is Map) {
@@ -236,7 +419,6 @@ class _UserHomePageState extends State<UserHomePage> {
         return;
       }
 
-      // kalau error, jangan bikin page crash — cukup anggap kosong
       setState(() {
         _favoriteIds = {};
         _loadingFavs = false;
@@ -250,9 +432,7 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
-  /// ✅ toggle favorite ke backend
   Future<void> _toggleFavorite(_ApiRecipeCard r) async {
-    // kalau belum punya session, lempar login
     if (_meId == null) {
       Navigator.pushNamedAndRemoveUntil(context, Routes.login, (x) => false);
       return;
@@ -260,7 +440,6 @@ class _UserHomePageState extends State<UserHomePage> {
 
     final isFav = _favoriteIds.contains(r.id);
 
-    // optimistic update biar UI responsif
     setState(() {
       if (isFav) {
         _favoriteIds.remove(r.id);
@@ -276,7 +455,6 @@ class _UserHomePageState extends State<UserHomePage> {
         await _dio.post('/recipes/${r.id}/favorite', data: {'user_id': _meId});
       }
     } on DioException catch (e) {
-      // rollback kalau gagal
       if (!mounted) return;
       setState(() {
         if (isFav) {
@@ -296,7 +474,6 @@ class _UserHomePageState extends State<UserHomePage> {
           : 'Gagal update favorit';
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (_) {
-      // rollback
       if (!mounted) return;
       setState(() {
         if (isFav) {
@@ -311,7 +488,6 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
-  /// ✅ POST history ketika user membuka detail resep
   Future<void> _recordHistory(int recipeId) async {
     final uid = _meId;
     if (uid == null) return;
@@ -329,7 +505,6 @@ class _UserHomePageState extends State<UserHomePage> {
         Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
         return;
       }
-      // selain itu: ignore (biar UX tidak terganggu)
     } catch (_) {
       // ignore
     } finally {
@@ -349,10 +524,7 @@ class _UserHomePageState extends State<UserHomePage> {
         appBar: AppBar(
           title: const Text('Jago Masak'),
           actions: [
-            IconButton(
-              onPressed: () {},
-              icon: const Icon(Icons.notifications_none),
-            ),
+            _notifActionButton(),
           ],
         ),
         body: RefreshIndicator(
@@ -457,7 +629,6 @@ class _UserHomePageState extends State<UserHomePage> {
 
                       return InkWell(
                         onTap: () {
-                          // ✅ post history (tanpa menghambat navigasi)
                           unawaited(_recordHistory(r.id));
 
                           final recipeModel = Recipe(
@@ -510,8 +681,6 @@ class _UserHomePageState extends State<UserHomePage> {
                                   },
                                 ),
                               ),
-
-                              // ✅ tombol favorite ke API
                               Positioned(
                                 right: 8,
                                 top: 8,
@@ -536,7 +705,6 @@ class _UserHomePageState extends State<UserHomePage> {
                                   ),
                                 ),
                               ),
-
                               Positioned(
                                 left: 0,
                                 right: 0,
