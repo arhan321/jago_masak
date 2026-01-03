@@ -15,6 +15,7 @@ import '../pages/user/user_account_info_page.dart';
 import '../pages/user/user_settings_page.dart';
 import '../pages/user/user_help_page.dart';
 import '../pages/user/user_terms_page.dart';
+import '../pages/categories/manage_categories_page.dart';
 
 class Routes {
   static const root = '/';
@@ -37,6 +38,7 @@ class Routes {
   static const userHelp = '/user-help';
   static const userTerms = '/user-terms';
   static const userPrivacy = '/user-privacy';
+  static const kelolaKategori = '/kelola-kategori';
 }
 
 final Map<String, WidgetBuilder> appRoutes = {
@@ -58,4 +60,5 @@ final Map<String, WidgetBuilder> appRoutes = {
   Routes.userHelp: (_) => const UserHelpPage(),
   Routes.userTerms: (_) => const UserTermsPage(),
   Routes.userPrivacy: (_) => const UserPrivacyPage(),
+  Routes.kelolaKategori: (_) => const ManageCategoriesPage(),
 };

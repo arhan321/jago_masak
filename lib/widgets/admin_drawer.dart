@@ -169,6 +169,11 @@ class _AdminDrawerState extends State<AdminDrawer> {
                 text: 'Kelola notifikasi',
                 onTap: () => _go(context, Routes.kelolaNotifikasi),
               ),
+              _item(
+                icon: Icons.category_outlined,
+                text: 'Kelola kategori',
+                onTap: () => _go(context, Routes.kelolaKategori),
+              ),
 
               const Spacer(),
               Divider(color: Colors.white.withOpacity(0.25), height: 1),
