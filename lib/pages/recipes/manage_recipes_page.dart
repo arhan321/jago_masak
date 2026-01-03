@@ -219,14 +219,13 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   }
 
   Future<void> _openEdit(_ApiRecipeRow r) async {
-    // ✅ FIX: model Recipe butuh imageUrl => isi dari API (photo_path -> url)
     final recipe = Recipe(
       id: r.id,
       title: r.title,
       category: r.categoryName,
       description: r.description ?? '',
       createdAt: DateTime.tryParse(r.createdAtIso ?? '') ?? DateTime.now(),
-      imageUrl: r.imageUrl ?? '', // ✅ INI YANG BIKIN ERROR HILANG
+      imageUrl: r.imageUrl ?? '',
     );
 
     final updated = await Navigator.push<bool?>(
@@ -244,6 +243,10 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final screenW = MediaQuery.of(context).size.width;
+    final contentW = screenW - 32; // padding 16 kiri/kanan
+    final tableW = contentW < 980 ? 980.0 : contentW.toDouble();
+
     return Scaffold(
       appBar: AppBar(title: const Text('Jago Masak')),
       drawer: const AdminDrawer(),
@@ -298,120 +301,56 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
                                       child: SingleChildScrollView(
                                         controller: _hCtrl,
                                         scrollDirection: Axis.horizontal,
-                                        child: ConstrainedBox(
-                                          constraints: const BoxConstraints(
-                                              minWidth: 900),
-                                          child: DataTable(
-                                            headingRowHeight: 48,
-                                            dataRowHeight: 56,
-                                            columnSpacing: 28,
-                                            horizontalMargin: 16,
-                                            dividerThickness: 0.8,
-                                            headingRowColor:
-                                                MaterialStatePropertyAll(
-                                              AppTheme.navy.withOpacity(0.92),
-                                            ),
-                                            headingTextStyle: const TextStyle(
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w800,
-                                            ),
-                                            columns: const [
-                                              DataColumn(
-                                                label: SizedBox(
-                                                    width: 50,
-                                                    child: Text('No')),
-                                              ),
-                                              DataColumn(
-                                                label: SizedBox(
-                                                    width: 260,
-                                                    child: Text('Nama Resep')),
-                                              ),
-                                              DataColumn(
-                                                label: SizedBox(
-                                                    width: 160,
-                                                    child: Text('Kategori')),
-                                              ),
-                                              DataColumn(
-                                                label: SizedBox(
-                                                    width: 180,
-                                                    child: Text(
-                                                        'Terakhir dibuat')),
-                                              ),
-                                              DataColumn(
-                                                label: SizedBox(
-                                                    width: 120,
-                                                    child: Text('Aksi')),
-                                              ),
-                                            ],
-                                            rows: List.generate(_recipes.length,
-                                                (i) {
-                                              final r = _recipes[i];
-                                              return DataRow(
-                                                cells: [
-                                                  DataCell(SizedBox(
-                                                      width: 50,
-                                                      child:
-                                                          Text('${i + 1}.'))),
-                                                  DataCell(
-                                                    SizedBox(
-                                                      width: 260,
-                                                      child: InkWell(
-                                                        onTap: () =>
-                                                            _openEdit(r),
+                                        child: SizedBox(
+                                          width: tableW,
+                                          child: Column(
+                                            children: [
+                                              _RecipesHeaderRow(),
+                                              const SizedBox(height: 10),
+                                              Expanded(
+                                                child: _recipes.isEmpty
+                                                    ? const Center(
                                                         child: Text(
-                                                          r.title,
-                                                          maxLines: 1,
-                                                          overflow: TextOverflow
-                                                              .ellipsis,
-                                                          style:
-                                                              const TextStyle(
-                                                            color:
-                                                                AppTheme.navy,
-                                                            decoration:
-                                                                TextDecoration
-                                                                    .underline,
+                                                          'Belum ada resep.',
+                                                          style: TextStyle(
                                                             fontWeight:
                                                                 FontWeight.w700,
                                                           ),
                                                         ),
+                                                      )
+                                                    : ListView.separated(
+                                                        itemCount:
+                                                            _recipes.length,
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .only(
+                                                                bottom: 8),
+                                                        separatorBuilder: (_,
+                                                                __) =>
+                                                            const SizedBox(
+                                                                height: 10),
+                                                        itemBuilder: (ctx, i) {
+                                                          final r = _recipes[i];
+                                                          return _RecipeRowCard(
+                                                            index: i + 1,
+                                                            r: r,
+                                                            onTap: () =>
+                                                                _openEdit(r),
+                                                            onDelete: () =>
+                                                                _confirmDelete(
+                                                                    r),
+                                                          );
+                                                        },
                                                       ),
-                                                    ),
-                                                  ),
-                                                  DataCell(SizedBox(
-                                                    width: 160,
-                                                    child: Text(r.categoryName),
-                                                  )),
-                                                  DataCell(SizedBox(
-                                                    width: 180,
-                                                    child:
-                                                        Text(r.createdAtText),
-                                                  )),
-                                                  DataCell(
-                                                    SizedBox(
-                                                      width: 120,
-                                                      child: Align(
-                                                        alignment: Alignment
-                                                            .centerLeft,
-                                                        child: IconButton(
-                                                          tooltip: 'Hapus',
-                                                          icon: const Icon(
-                                                            Icons.delete,
-                                                            color: Colors.red,
-                                                          ),
-                                                          onPressed: () =>
-                                                              _confirmDelete(r),
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                ],
-                                              );
-                                            }),
+                                              ),
+                                            ],
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
+
+                                  // pagination kecil (optional)
                                   if (_lastPage > 1)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 10),
@@ -419,9 +358,11 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
                                         mainAxisAlignment:
                                             MainAxisAlignment.end,
                                         children: [
-                                          Text('$_page / $_lastPage',
-                                              style: const TextStyle(
-                                                  fontWeight: FontWeight.w700)),
+                                          Text(
+                                            '$_page / $_lastPage',
+                                            style: const TextStyle(
+                                                fontWeight: FontWeight.w700),
+                                          ),
                                           const SizedBox(width: 10),
                                           IconButton(
                                             onPressed: (_page <= 1)
@@ -455,17 +396,239 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   }
 }
 
+/// ===== Header “table” versi modern =====
+class _RecipesHeaderRow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 52,
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: AppTheme.navy.withOpacity(0.92),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(width: 54, child: _HeaderText('No')),
+          SizedBox(width: 64), // thumbnail
+          Expanded(flex: 4, child: _HeaderText('Nama Resep')),
+          SizedBox(width: 170, child: _HeaderText('Kategori')),
+          SizedBox(width: 170, child: _HeaderText('Terakhir Dibuat')),
+          SizedBox(width: 110, child: _HeaderText('Aksi')),
+        ],
+      ),
+    );
+  }
+}
+
+class _HeaderText extends StatelessWidget {
+  final String text;
+  const _HeaderText(this.text);
+
+  @override
+  Widget build(BuildContext context) {
+    return Text(
+      text,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
+      style: const TextStyle(
+        color: Colors.white,
+        fontWeight: FontWeight.w800,
+      ),
+    );
+  }
+}
+
+/// ===== Row card =====
+class _RecipeRowCard extends StatelessWidget {
+  final int index;
+  final _ApiRecipeRow r;
+  final VoidCallback onTap;
+  final VoidCallback onDelete;
+
+  const _RecipeRowCard({
+    required this.index,
+    required this.r,
+    required this.onTap,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final bg = AppTheme.softBlue.withOpacity(0.35);
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            color: bg,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: AppTheme.navy.withOpacity(0.15)),
+          ),
+          child: Row(
+            children: [
+              SizedBox(
+                width: 54,
+                child: Text(
+                  '$index.',
+                  style: const TextStyle(fontWeight: FontWeight.w800),
+                ),
+              ),
+
+              // thumbnail
+              _Thumb(url: r.imageUrl ?? ''),
+              const SizedBox(width: 12),
+
+              // title
+              Expanded(
+                flex: 4,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      r.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: AppTheme.navy,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      (r.description ?? '').isEmpty
+                          ? '—'
+                          : (r.description!.length > 70
+                              ? '${r.description!.substring(0, 70)}...'
+                              : r.description!),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // category chip
+              SizedBox(
+                width: 170,
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(999),
+                      border: Border.all(
+                        color: AppTheme.navy.withOpacity(0.25),
+                      ),
+                    ),
+                    child: Text(
+                      r.categoryName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        color: AppTheme.navy,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 10),
+
+              // date
+              SizedBox(
+                width: 170,
+                child: Text(
+                  r.createdAtText,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+
+              // actions
+              SizedBox(
+                width: 110,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    IconButton(
+                      tooltip: 'Edit',
+                      onPressed: onTap,
+                      icon: const Icon(Icons.edit, color: AppTheme.navy),
+                    ),
+                    IconButton(
+                      tooltip: 'Hapus',
+                      onPressed: onDelete,
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Thumb extends StatelessWidget {
+  final String url;
+  const _Thumb({required this.url});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUrl = url.trim().isNotEmpty;
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        width: 64,
+        height: 52,
+        color: Colors.white,
+        child: hasUrl
+            ? Image.network(
+                url,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.image_not_supported_outlined,
+                      color: Colors.black38),
+                ),
+              )
+            : const Center(
+                child: Icon(Icons.image_outlined, color: Colors.black38),
+              ),
+      ),
+    );
+  }
+}
+
 class _ApiRecipeRow {
   final int id;
   final String title;
   final String categoryName;
   final String createdAtText;
 
-  // optional buat edit
   final String? description;
   final String? createdAtIso;
 
-  // ✅ untuk memenuhi Recipe.imageUrl
   final String? imageUrl;
 
   _ApiRecipeRow({
@@ -484,7 +647,6 @@ class _ApiRecipeRow {
   }) {
     final createdAt = (json['created_at'] ?? '').toString();
 
-    // category bisa relasi: {category: {name: ...}}
     String catName = '-';
     if (json['category'] is Map) {
       final c = Map<String, dynamic>.from(json['category'] as Map);
@@ -495,7 +657,6 @@ class _ApiRecipeRow {
       catName = 'ID ${json['category_id']}';
     }
 
-    // ✅ photo_path dari Laravel public disk: "recipes/xxx.jpg"
     final photoPath = (json['photo_path'] ?? '').toString();
     final imgUrl = _photoUrlFromPath(baseUrl, photoPath);
 
@@ -515,13 +676,10 @@ class _ApiRecipeRow {
   static String _photoUrlFromPath(String baseUrl, String photoPath) {
     if (photoPath.trim().isEmpty) return '';
 
-    // kalau backend sudah kirim full url
     if (photoPath.startsWith('http://') || photoPath.startsWith('https://')) {
       return photoPath;
     }
 
-    // baseUrl kamu biasanya .../api
-    // jadi kita ambil origin-nya untuk /storage/...
     final root = baseUrl.endsWith('/api')
         ? baseUrl.substring(0, baseUrl.length - 4)
         : baseUrl;
