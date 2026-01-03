@@ -67,4 +67,9 @@ class Recipe extends Model
     {
         return $this->photo_path ? asset('storage/'.$this->photo_path) : null;
     }
+
+    public function histories()
+    {
+        return $this->hasMany(RecipeHistory::class, 'recipe_id');
+    }
 }

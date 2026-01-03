@@ -27,6 +27,22 @@ class RecipeController extends Controller
         return $q->latest()->paginate(10);
     }
 
+    // ADMIN: list all recipes (published + draft)
+    public function adminIndex(Request $request)
+    {
+        $q = Recipe::query()->with(['category','tags']);
+
+        if ($search = $request->query('search')) {
+            $q->where('title', 'like', "%{$search}%");
+        }
+
+        if ($categoryId = $request->query('category_id')) {
+            $q->where('category_id', $categoryId);
+        }
+
+        return $q->latest()->paginate(10);
+    }
+
     // PUBLIC: show recipe (published), kalau belum published -> hanya owner/admin
     public function show(Request $request, Recipe $recipe)
     {
@@ -183,5 +199,18 @@ class RecipeController extends Controller
             ->all();
 
         $recipe->tags()->sync($tagIds);
+    }
+
+    public function totalResep()
+    {
+        $total = Recipe::count();
+        $published = Recipe::where('is_published', true)->count();
+        $draft = Recipe::where('is_published', false)->count();
+
+        return response()->json([
+            'total_resep' => $total,
+            'total_published' => $published,
+            'total_draft' => $draft,
+        ]);
     }
 }
