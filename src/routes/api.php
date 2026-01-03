@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\FavoriteController;
 use App\Http\Controllers\Api\RecipeController;
+use App\Http\Controllers\NotificationCotroller;
 use App\Http\Controllers\RecipeHistoryController;
 
 
@@ -43,7 +44,12 @@ Route::put('/users/{id}', [AuthController::class, 'updateById']);
 // Route::delete('/recipes/{recipe}/favorite', [\App\Http\Controllers\FavoriteController::class, 'destroy']);
 // Route::get('/me/favorites', [\App\Http\Controllers\FavoriteController::class, 'index']);
 
-
+    Route::get('/notifications', [NotificationCotroller::class, 'index']);
+    Route::get('/notifications/{notification}', [NotificationCotroller::class, 'show']);
+    Route::post('/notifications', [NotificationCotroller::class, 'store']);
+    Route::put('/notifications/{notification}', [NotificationCotroller::class, 'update']);
+    Route::patch('/notifications/{notification}', [NotificationCotroller::class, 'update']);
+    Route::delete('/notifications/{notification}', [NotificationCotroller::class, 'destroy']);
 /*
 |--------------------------------------------------------------------------
 | Protected Routes (auth)
