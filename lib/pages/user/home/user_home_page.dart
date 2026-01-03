@@ -18,10 +18,8 @@ class UserHomePage extends StatefulWidget {
 class _UserHomePageState extends State<UserHomePage> {
   final db = MockDb.instance;
 
-  // ✅ resep yang gambarnya error -> disembunyikan
   final Set<int> _hiddenRecipeIds = {};
 
-  // ✅ API state
   Dio get _dio => ApiClient.instance.dio;
 
   String _userName = '...';
