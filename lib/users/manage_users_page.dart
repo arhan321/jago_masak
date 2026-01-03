@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:dio/dio.dart';
 
+import '../../core/app_theme.dart';
 import '../../core/network/api_client.dart';
 import '../../core/routes.dart';
 import '../../widgets/admin_drawer.dart';
@@ -13,8 +14,6 @@ class ManageUsersPage extends StatefulWidget {
 }
 
 class _ManageUsersPageState extends State<ManageUsersPage> {
-  final ScrollController _hCtrl = ScrollController();
-
   bool _loading = true;
   String? _error;
 
@@ -24,12 +23,6 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
   void initState() {
     super.initState();
     _fetchUsers();
-  }
-
-  @override
-  void dispose() {
-    _hCtrl.dispose();
-    super.dispose();
   }
 
   Future<void> _fetchUsers() async {
@@ -43,70 +36,56 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
 
       // ✅ pastikan backend punya GET /api/users (admin only biasanya)
       final res = await dio.get('/users');
-
       final data = res.data;
+
+      List<_ApiUserRow> parsed = [];
 
       // 1) Kalau backend return List langsung: [ {...}, {...} ]
       if (data is List) {
-        final parsed = data
+        parsed = data
             .map((e) => e is Map
                 ? _ApiUserRow.fromJson(Map<String, dynamic>.from(e))
                 : null)
             .whereType<_ApiUserRow>()
             .toList();
-
-        if (!mounted) return;
-        setState(() {
-          _users = parsed;
-          _loading = false;
-        });
-        return;
       }
 
-      // 2) Kalau backend return Laravel paginate: { data: [ ... ], ... }
-      if (data is Map && data['data'] is List) {
+      // 2) Kalau backend return paginate: { data: [ ... ], ... }
+      else if (data is Map && data['data'] is List) {
         final list = List.from(data['data'] as List);
-        final parsed = list
+        parsed = list
             .map((e) => e is Map
                 ? _ApiUserRow.fromJson(Map<String, dynamic>.from(e))
                 : null)
             .whereType<_ApiUserRow>()
             .toList();
-
-        if (!mounted) return;
-        setState(() {
-          _users = parsed;
-          _loading = false;
-        });
-        return;
       }
 
-      // 3) Kadang paginate nested: { data: { data: [...] } }
-      if (data is Map &&
+      // 3) paginate nested: { data: { data: [...] } }
+      else if (data is Map &&
           data['data'] is Map &&
           (data['data'] as Map)['data'] is List) {
         final nested = data['data'] as Map;
         final list = List.from(nested['data'] as List);
-
-        final parsed = list
+        parsed = list
             .map((e) => e is Map
                 ? _ApiUserRow.fromJson(Map<String, dynamic>.from(e))
                 : null)
             .whereType<_ApiUserRow>()
             .toList();
-
+      } else {
         if (!mounted) return;
         setState(() {
-          _users = parsed;
           _loading = false;
+          _error = 'Format response tidak sesuai';
         });
         return;
       }
 
       if (!mounted) return;
       setState(() {
+        _users = parsed;
         _loading = false;
-        _error = 'Format response tidak sesuai';
       });
     } on DioException catch (e) {
       if (!mounted) return;
@@ -137,170 +116,258 @@ class _ManageUsersPageState extends State<ManageUsersPage> {
     return Scaffold(
       appBar: AppBar(title: const Text('Jago Masak')),
       drawer: const AdminDrawer(),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SafeArea(
         child: Column(
           children: [
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Text(
-                'Kelola Pengguna',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+            // ===== HEADER =====
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Text(
+                      'Kelola Pengguna',
+                      style:
+                          TextStyle(fontSize: 16, fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Refresh',
+                    onPressed: _fetchUsers,
+                    icon: const Icon(Icons.refresh),
+                  ),
+                ],
               ),
             ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: _loading
-                        ? const Center(child: CircularProgressIndicator())
-                        : (_error != null)
-                            ? _ErrorBox(message: _error!, onRetry: _fetchUsers)
-                            : Scrollbar(
-                                controller: _hCtrl,
-                                thumbVisibility: true,
-                                trackVisibility: true,
-                                scrollbarOrientation:
-                                    ScrollbarOrientation.bottom,
-                                child: SingleChildScrollView(
-                                  controller: _hCtrl,
-                                  scrollDirection: Axis.horizontal,
-                                  child: ConstrainedBox(
-                                    constraints:
-                                        const BoxConstraints(minWidth: 980),
-                                    child: DataTable(
-                                      headingRowHeight: 48,
-                                      dataRowHeight: 56,
-                                      columnSpacing: 28,
-                                      horizontalMargin: 16,
-                                      dividerThickness: 0.8,
-                                      headingRowColor: MaterialStatePropertyAll(
-                                        Colors.blueGrey.shade300,
-                                      ),
-                                      headingTextStyle: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        color: Colors.black87,
-                                      ),
-                                      columns: const [
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 60,
-                                            child: Text('No.'),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 160,
-                                            child: Text('Nama'),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 220,
-                                            child: Text('Email'),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 140,
-                                            child: Text('No. HP'),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 140,
-                                            child: Text('Roles'),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: SizedBox(
-                                            width: 200,
-                                            child: Text('Tgl Dibuat'),
-                                          ),
-                                        ),
-                                      ],
-                                      rows: List.generate(_users.length, (i) {
-                                        final u = _users[i];
 
-                                        // ✅ jumlah cells harus sama dengan jumlah columns (6)
-                                        return DataRow(
-                                          cells: [
-                                            DataCell(
-                                              SizedBox(
-                                                width: 60,
-                                                child: Text('${i + 1}.'),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 160,
-                                                child: Text(
-                                                  u.name,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 220,
-                                                child: Text(
-                                                  u.email,
-                                                  maxLines: 1,
-                                                  overflow:
-                                                      TextOverflow.ellipsis,
-                                                ),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 140,
-                                                child: Text(u.phone),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 140,
-                                                child: Text(u.role),
-                                              ),
-                                            ),
-                                            DataCell(
-                                              SizedBox(
-                                                width: 200,
-                                                child: Text(u.createdAtText),
-                                              ),
-                                            ),
-                                          ],
-                                        );
-                                      }),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                  ),
-                ),
-              ),
+            // ===== CONTENT =====
+            Expanded(
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : (_error != null)
+                      ? _ErrorBox(message: _error!, onRetry: _fetchUsers)
+                      : RefreshIndicator(
+                          onRefresh: _fetchUsers,
+                          child: ListView.separated(
+                            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                            itemCount: _users.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: 10),
+                            itemBuilder: (context, index) {
+                              final u = _users[index];
+                              return _UserCard(
+                                index: index + 1,
+                                user: u,
+                              );
+                            },
+                          ),
+                        ),
             ),
-            const SizedBox(height: 10),
-            Align(
-              alignment: Alignment.centerRight,
-              child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Belum ada aksi simpan (API read-only).'),
+
+            // ===== FOOTER BUTTON (tetap ada biar struktur kamu aman) =====
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: ElevatedButton(
+                  style:
+                      ElevatedButton.styleFrom(backgroundColor: Colors.green),
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Belum ada aksi simpan (API read-only).'),
+                    ),
                   ),
+                  child: const Text('Simpan'),
                 ),
-                child: const Text('Simpan'),
               ),
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+class _UserCard extends StatelessWidget {
+  final int index;
+  final _ApiUserRow user;
+
+  const _UserCard({
+    required this.index,
+    required this.user,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isAdmin = user.role.toLowerCase() == 'admin';
+
+    return Card(
+      elevation: 2,
+      shadowColor: Colors.black12,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(14),
+          // nuansa biru muda biar nyambung sama dashboard
+          color: AppTheme.softBlue,
+        ),
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ===== NUMBER BADGE =====
+            Container(
+              width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: AppTheme.navy,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                '$index',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+
+            // ===== MAIN CONTENT =====
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Name + role chip
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          user.name.isEmpty ? '-' : user.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w900,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      _RoleChip(
+                        text: user.role.isEmpty ? '-' : user.role,
+                        isAdmin: isAdmin,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+
+                  // Email
+                  _InfoRow(
+                    icon: Icons.email_outlined,
+                    label: 'Email',
+                    value: user.email,
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Phone
+                  _InfoRow(
+                    icon: Icons.phone_outlined,
+                    label: 'No. HP',
+                    value: user.phone,
+                  ),
+                  const SizedBox(height: 6),
+
+                  // Created at
+                  _InfoRow(
+                    icon: Icons.calendar_month_outlined,
+                    label: 'Dibuat',
+                    value: user.createdAtText,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _RoleChip extends StatelessWidget {
+  final String text;
+  final bool isAdmin;
+
+  const _RoleChip({required this.text, required this.isAdmin});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: isAdmin ? Colors.redAccent.withOpacity(0.15) : Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(
+          color: isAdmin ? Colors.redAccent.withOpacity(0.35) : Colors.white24,
+        ),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: FontWeight.w900,
+          fontSize: 12,
+          color: isAdmin ? Colors.redAccent : AppTheme.navy,
+        ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+
+  const _InfoRow({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final v = value.isEmpty ? '-' : value;
+
+    return Row(
+      children: [
+        Icon(icon, size: 16, color: AppTheme.navy),
+        const SizedBox(width: 8),
+        SizedBox(
+          width: 60,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w800,
+              color: Colors.black54,
+            ),
+          ),
+        ),
+        const SizedBox(width: 6),
+        Expanded(
+          child: Text(
+            v,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.black87,
+            ),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -323,13 +390,9 @@ class _ApiUserRow {
   });
 
   factory _ApiUserRow.fromJson(Map<String, dynamic> json) {
-    // created_at dari laravel biasanya ISO string
     final createdAt = (json['created_at'] ?? '').toString();
 
-    // role bisa "role" atau "roles" (tergantung backend kamu)
     final roleVal = (json['role'] ?? json['roles'] ?? '-').toString();
-
-    // nomor telepon kamu pakai "nomor_telfon" (sesuai yg kamu sebut)
     final phoneVal =
         (json['nomor_telfon'] ?? json['phone'] ?? json['no_hp'] ?? '-')
             .toString();
