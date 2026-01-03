@@ -15,7 +15,8 @@ class UserShellPage extends StatefulWidget {
 class _UserShellPageState extends State<UserShellPage> {
   int index = 0;
 
-  final pages = const [
+  // ✅ FIX: gunakan List<Widget> (bukan List<StatefulWidget>)
+  final List<Widget> pages = const [
     UserHomePage(),
     UserFavoritePage(),
     UserHistoryPage(),
@@ -34,12 +35,21 @@ class _UserShellPageState extends State<UserShellPage> {
         type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
-              icon: Icon(Icons.home_outlined), label: 'Beranda'),
+            icon: Icon(Icons.home_outlined),
+            label: 'Beranda',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.favorite_border), label: 'Favorit'),
-          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'Riwayat'),
+            icon: Icon(Icons.favorite_border),
+            label: 'Favorit',
+          ),
           BottomNavigationBarItem(
-              icon: Icon(Icons.person_outline), label: 'Akun'),
+            icon: Icon(Icons.history),
+            label: 'Riwayat',
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.person_outline),
+            label: 'Akun',
+          ),
         ],
       ),
     );

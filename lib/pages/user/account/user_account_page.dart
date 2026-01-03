@@ -1,8 +1,78 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
+
+import '../../../core/network/api_client.dart';
 import '../../../core/routes.dart';
 
-class UserAccountPage extends StatelessWidget {
+class UserAccountPage extends StatefulWidget {
   const UserAccountPage({super.key});
+
+  @override
+  State<UserAccountPage> createState() => _UserAccountPageState();
+}
+
+class _UserAccountPageState extends State<UserAccountPage> {
+  Dio get _dio => ApiClient.instance.dio;
+
+  bool _loadingMe = true;
+  String _name = '...';
+  String _email = '...';
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchMe();
+  }
+
+  Future<void> _fetchMe() async {
+    if (!mounted) return;
+    setState(() => _loadingMe = true);
+
+    try {
+      final res = await _dio.get('/me'); // auth:sanctum
+      final data = res.data;
+
+      if (data is Map) {
+        final name = (data['name'] ?? '').toString().trim();
+        final email = (data['email'] ?? '').toString().trim();
+
+        if (!mounted) return;
+        setState(() {
+          _name = name.isEmpty ? 'User' : name;
+          _email = email.isEmpty ? '-' : email;
+          _loadingMe = false;
+        });
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _name = 'User';
+        _email = '-';
+        _loadingMe = false;
+      });
+    } on DioException catch (e) {
+      if (!mounted) return;
+
+      if (e.response?.statusCode == 401) {
+        Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+        return;
+      }
+
+      setState(() {
+        _name = 'User';
+        _email = '-';
+        _loadingMe = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _name = 'User';
+        _email = '-';
+        _loadingMe = false;
+      });
+    }
+  }
 
   Future<void> _logout(BuildContext context) async {
     final rootNav = Navigator.of(context, rootNavigator: true);
@@ -14,8 +84,9 @@ class UserAccountPage extends StatelessWidget {
         content: const Text('Yakin ingin keluar?'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(c, false),
-              child: const Text('Batal')),
+            onPressed: () => Navigator.pop(c, false),
+            child: const Text('Batal'),
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             onPressed: () => Navigator.pop(c, true),
@@ -26,33 +97,56 @@ class UserAccountPage extends StatelessWidget {
     );
 
     if (ok == true) {
+      // OPTIONAL (lebih benar): call backend logout dulu kalau ada endpoint /logout
+      // try { await _dio.post('/logout'); } catch (_) {}
+
       rootNav.pushNamedAndRemoveUntil(Routes.login, (route) => false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final hello = _loadingMe ? 'Halo ...' : 'Halo $_name';
+
     return SafeArea(
       child: Scaffold(
         appBar: AppBar(
           title: Row(
-            children: const [
-              CircleAvatar(child: Icon(Icons.person)),
-              SizedBox(width: 10),
+            children: [
+              const CircleAvatar(child: Icon(Icons.person)),
+              const SizedBox(width: 10),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Halo Sarminah',
-                        style: TextStyle(
-                            fontWeight: FontWeight.w900, fontSize: 14)),
-                    Text('sarminah@gmail.com', style: TextStyle(fontSize: 11)),
+                    Text(
+                      hello,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 14,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Text(
+                      _loadingMe ? '...' : _email,
+                      style: const TextStyle(fontSize: 11),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ],
                 ),
               ),
             ],
           ),
           leading: const SizedBox(),
+          actions: [
+            IconButton(
+              tooltip: 'Refresh',
+              onPressed: _fetchMe,
+              icon: const Icon(Icons.refresh),
+            ),
+          ],
         ),
         body: ListView(
           padding: const EdgeInsets.all(16),
