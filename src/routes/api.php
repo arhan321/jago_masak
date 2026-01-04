@@ -29,7 +29,7 @@ Route::get('/total_pengguna', [AuthController::class, 'totalPengguna']);
 Route::get('/users', [AuthController::class, 'users']);
 
  Route::get('/admin/recipes', [RecipeController::class, 'adminIndex']);
- Route::delete('/recipes/{recipe}', [RecipeController::class, 'destroy']);
+
 
 Route::get('/sarans', [saranController::class, 'index']);
 Route::post('/sarans', [saranController::class, 'store']);
@@ -63,7 +63,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/recipes/{recipe}', [RecipeController::class, 'update']);
     Route::patch('/recipes/{recipe}', [RecipeController::class, 'update']);
     // Route::delete('/recipes/{recipe}', [RecipeController::class, 'destroy']);
-
+    Route::delete('/recipes/{recipe}', [RecipeController::class, 'destroy']);
     Route::get('/me/recipes', [RecipeController::class, 'myRecipes']);
 
     Route::post('/categories', [CategoryController::class, 'store']);
