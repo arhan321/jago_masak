@@ -30,11 +30,17 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   // data dari API
   List<_ApiRecipeRow> _recipes = [];
 
-  // pagination (optional)
+  // pagination
   int _page = 1;
   int _lastPage = 1;
 
   Dio get _dio => ApiClient.instance.dio;
+
+  // LIST admin (punya endpoint adminIndex)
+  static const String _listEndpoint = '/admin/recipes';
+
+  // ✅ DELETE sesuai route backend kamu: /recipes/{recipe}
+  static const String _deleteEndpointPrefix = '/recipes';
 
   @override
   void initState() {
@@ -50,6 +56,11 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
     super.dispose();
   }
 
+  void _snack(String text) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  }
+
   void _onSearchChanged(String v) {
     query = v.trim();
     _debounce?.cancel();
@@ -59,18 +70,31 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   }
 
   Future<void> _fetchRecipes({required int page}) async {
+    if (!mounted) return;
+
     setState(() {
       _loading = true;
       _error = null;
     });
 
     try {
+      debugPrint('🧾 [Recipe] GET $_listEndpoint page=$page search="$query"');
+
       final res = await _dio.get(
-        '/admin/recipes', // ⚠️ sesuaikan jika endpoint kamu beda
+        _listEndpoint,
         queryParameters: {
           'page': page,
           if (query.isNotEmpty) 'search': query,
+
+          // ✅ anti-cache
+          'ts': DateTime.now().millisecondsSinceEpoch,
         },
+        options: Options(
+          headers: const {
+            'Cache-Control': 'no-cache',
+            'Pragma': 'no-cache',
+          },
+        ),
       );
 
       final data = res.data;
@@ -88,6 +112,12 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
                 : null)
             .whereType<_ApiRecipeRow>()
             .toList();
+
+        if (parsed.isNotEmpty) {
+          debugPrint('✅ [Recipe] First item rawJson: ${parsed.first.rawJson}');
+        } else {
+          debugPrint('ℹ️ [Recipe] List empty');
+        }
 
         if (!mounted) return;
         setState(() {
@@ -133,6 +163,9 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
     } on DioException catch (e) {
       if (!mounted) return;
 
+      debugPrint(
+          '❌ [Recipe] GET ERROR ${e.response?.statusCode} => ${e.response?.data}');
+
       if (e.response?.statusCode == 401) {
         Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
         return;
@@ -144,8 +177,9 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
             ? ((e.response?.data['message'] ?? 'Gagal memuat resep').toString())
             : 'Gagal memuat resep';
       });
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      debugPrint('❌ [Recipe] GET ERROR => $e');
       setState(() {
         _loading = false;
         _error = 'Gagal memuat resep';
@@ -154,6 +188,12 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   }
 
   Future<void> _confirmDelete(_ApiRecipeRow r) async {
+    if (r.id <= 0) {
+      _snack('ID resep tidak valid. Pastikan response API punya field "id".');
+      debugPrint('❌ INVALID RECIPE ID. title="${r.title}", raw=${r.rawJson}');
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
@@ -176,13 +216,31 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
     if (ok != true) return;
 
     try {
-      await _dio.delete('/recipes/${r.id}');
+      // ✅ FIX endpoint sesuai backend: /recipes/{id}
+      final path = '$_deleteEndpointPrefix/${r.id}';
+      debugPrint('🧾 [Recipe] DELETE $path');
+
+      final res = await _dio.delete(path);
+
+      debugPrint('✅ [Recipe] DELETE RESPONSE ${res.statusCode} => ${res.data}');
+
+      // ✅ Optimistic UI: hilangkan dari list dulu
+      if (mounted) {
+        setState(() {
+          _recipes.removeWhere((x) => x.id == r.id);
+        });
+      }
 
       if (!mounted) return;
-      _snack('Resep dihapus.');
-      _fetchRecipes(page: 1);
+      _snack('Resep dihapus ✅');
+
+      // refresh data dari server
+      await _fetchRecipes(page: 1);
     } on DioException catch (e) {
       if (!mounted) return;
+
+      debugPrint(
+          '❌ [Recipe] DELETE ERROR ${e.response?.statusCode} => ${e.response?.data}');
 
       if (e.response?.statusCode == 401) {
         Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
@@ -194,14 +252,11 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
           : 'Gagal hapus resep';
 
       _snack(msg);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
+      debugPrint('❌ [Recipe] DELETE ERROR => $e');
       _snack('Gagal hapus resep');
     }
-  }
-
-  void _snack(String text) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
   }
 
   Future<void> _openAdd() async {
@@ -313,9 +368,9 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
                                                         child: Text(
                                                           'Belum ada resep.',
                                                           style: TextStyle(
-                                                            fontWeight:
-                                                                FontWeight.w700,
-                                                          ),
+                                                              fontWeight:
+                                                                  FontWeight
+                                                                      .w700),
                                                         ),
                                                       )
                                                     : ListView.separated(
@@ -349,8 +404,6 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
                                       ),
                                     ),
                                   ),
-
-                                  // pagination kecil (optional)
                                   if (_lastPage > 1)
                                     Padding(
                                       padding: const EdgeInsets.only(top: 10),
@@ -396,7 +449,7 @@ class _ManageRecipesPageState extends State<ManageRecipesPage> {
   }
 }
 
-/// ===== Header “table” versi modern =====
+/// ===== Header “table” =====
 class _RecipesHeaderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
@@ -478,19 +531,15 @@ class _RecipeRowCard extends StatelessWidget {
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
               ),
-
-              // thumbnail
               _Thumb(url: r.imageUrl ?? ''),
               const SizedBox(width: 12),
-
-              // title
               Expanded(
                 flex: 4,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      r.title,
+                      r.title.isEmpty ? '(tanpa judul)' : r.title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: const TextStyle(
@@ -516,10 +565,7 @@ class _RecipeRowCard extends StatelessWidget {
                   ],
                 ),
               ),
-
               const SizedBox(width: 10),
-
-              // category chip
               SizedBox(
                 width: 170,
                 child: Align(
@@ -547,10 +593,7 @@ class _RecipeRowCard extends StatelessWidget {
                   ),
                 ),
               ),
-
               const SizedBox(width: 10),
-
-              // date
               SizedBox(
                 width: 170,
                 child: Text(
@@ -561,8 +604,6 @@ class _RecipeRowCard extends StatelessWidget {
                   ),
                 ),
               ),
-
-              // actions
               SizedBox(
                 width: 110,
                 child: Row(
@@ -628,14 +669,16 @@ class _ApiRecipeRow {
 
   final String? description;
   final String? createdAtIso;
-
   final String? imageUrl;
+
+  final Map<String, dynamic> rawJson;
 
   _ApiRecipeRow({
     required this.id,
     required this.title,
     required this.categoryName,
     required this.createdAtText,
+    required this.rawJson,
     this.description,
     this.createdAtIso,
     this.imageUrl,
@@ -645,6 +688,12 @@ class _ApiRecipeRow {
     Map<String, dynamic> json, {
     required String baseUrl,
   }) {
+    final rawId = json['id'] ?? json['recipe_id'];
+    final id = rawId is int ? rawId : int.tryParse('$rawId') ?? 0;
+
+    final title =
+        (json['title'] ?? json['name'] ?? json['judul'] ?? '').toString();
+
     final createdAt = (json['created_at'] ?? '').toString();
 
     String catName = '-';
@@ -661,15 +710,14 @@ class _ApiRecipeRow {
     final imgUrl = _photoUrlFromPath(baseUrl, photoPath);
 
     return _ApiRecipeRow(
-      id: (json['id'] ?? 0) is int
-          ? (json['id'] as int)
-          : int.tryParse('${json['id']}') ?? 0,
-      title: (json['title'] ?? '').toString(),
+      id: id,
+      title: title,
       description: (json['description'] ?? '').toString(),
       categoryName: catName,
       createdAtIso: createdAt,
       createdAtText: _formatCreatedAt(createdAt),
       imageUrl: imgUrl,
+      rawJson: json,
     );
   }
 
