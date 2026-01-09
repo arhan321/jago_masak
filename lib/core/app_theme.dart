@@ -43,10 +43,17 @@ class AppTheme {
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       ),
     ),
-    cardTheme: CardTheme(
+    // cardTheme: CardTheme(
+    //   color: Colors.white,
+    //   elevation: 0,
+    //   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    // ),
+    cardTheme: const CardThemeData(
       color: Colors.white,
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.all(Radius.circular(12)),
+      ),
     ),
   );
 }
