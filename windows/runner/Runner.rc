@@ -90,12 +90,12 @@ BEGIN
         BLOCK "040904e4"
         BEGIN
             VALUE "CompanyName", "com.example" "\0"
-            VALUE "FileDescription", "jagomasak" "\0"
+            VALUE "FileDescription", "jago_masak" "\0"
             VALUE "FileVersion", VERSION_AS_STRING "\0"
-            VALUE "InternalName", "jagomasak" "\0"
-            VALUE "LegalCopyright", "Copyright (C) 2025 com.example. All rights reserved." "\0"
-            VALUE "OriginalFilename", "jagomasak.exe" "\0"
-            VALUE "ProductName", "jagomasak" "\0"
+            VALUE "InternalName", "jago_masak" "\0"
+            VALUE "LegalCopyright", "Copyright (C) 2026 com.example. All rights reserved." "\0"
+            VALUE "OriginalFilename", "jago_masak.exe" "\0"
+            VALUE "ProductName", "jago_masak" "\0"
             VALUE "ProductVersion", VERSION_AS_STRING "\0"
         END
     END
