@@ -213,4 +213,70 @@ class RecipeController extends Controller
             'total_draft' => $draft,
         ]);
     }
+
+    public function storeBulk(Request $request)
+{
+    $user = $request->user(); // pastikan route pakai auth middleware
+    abort_unless($user, 401);
+
+    // Validasi format bulk
+    $validated = $request->validate([
+        'recipes' => ['required', 'array', 'min:1'],
+        'recipes.*' => ['array'],
+
+        // fields recipe
+        'recipes.*.title' => ['required','string','max:255'],
+        'recipes.*.description' => ['nullable','string'],
+        'recipes.*.category_id' => ['nullable','exists:categories,id'],
+        'recipes.*.prep_time_minutes' => ['nullable','integer','min:0'],
+        'recipes.*.cook_time_minutes' => ['nullable','integer','min:0'],
+        'recipes.*.servings' => ['nullable','integer','min:1'],
+        'recipes.*.is_published' => ['sometimes','boolean'],
+
+        // tags
+        'recipes.*.tags' => ['sometimes','array'],
+        'recipes.*.tags.*' => ['string','max:50'],
+
+        // ingredients
+        'recipes.*.ingredients' => ['sometimes','array'],
+        'recipes.*.ingredients.*.name' => ['required_with:recipes.*.ingredients','string','max:255'],
+        'recipes.*.ingredients.*.quantity' => ['nullable','string','max:50'],
+        'recipes.*.ingredients.*.unit' => ['nullable','string','max:50'],
+
+        // steps
+        'recipes.*.steps' => ['sometimes','array'],
+        'recipes.*.steps.*.step_number' => ['required_with:recipes.*.steps','integer','min:1'],
+        'recipes.*.steps.*.instruction' => ['required_with:recipes.*.steps','string'],
+    ]);
+
+    $created = DB::transaction(function () use ($validated, $user) {
+        $result = [];
+
+        foreach ($validated['recipes'] as $item) {
+            $data = $item;
+            $data['user_id'] = $user->id;
+
+            // NOTE: bulk photo upload (per item) lebih ribet karena multipart + array files.
+            // Kalau memang butuh, kita bisa bikin skema: photos[index] dan cocokkan index.
+            // Untuk sekarang, photo_path di-skip di bulk.
+
+            $recipe = Recipe::create($data);
+
+            // relations
+            $recipe->ingredients()->createMany($data['ingredients'] ?? []);
+            $recipe->steps()->createMany($data['steps'] ?? []);
+            $this->syncTags($recipe, $data['tags'] ?? []);
+
+            $result[] = $recipe->load(['category','tags','ingredients','steps']);
+        }
+
+        return $result;
+    });
+
+    return response()->json([
+        'message' => 'Bulk recipes created',
+        'count' => count($created),
+        'data' => $created,
+    ], 201);
+}
 }

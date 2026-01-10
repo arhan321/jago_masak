@@ -40,6 +40,7 @@ Route::get('/total_resep', [RecipeController::class, 'totalResep']);
 Route::patch('/users/{id}', [AuthController::class, 'updateById']);
 Route::put('/users/{id}', [AuthController::class, 'updateById']);
 
+
 // Route::post('/recipes/{recipe}/favorite', [\App\Http\Controllers\FavoriteController::class, 'store']);
 // Route::delete('/recipes/{recipe}/favorite', [\App\Http\Controllers\FavoriteController::class, 'destroy']);
 // Route::get('/me/favorites', [\App\Http\Controllers\FavoriteController::class, 'index']);
@@ -65,6 +66,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route::delete('/recipes/{recipe}', [RecipeController::class, 'destroy']);
     Route::delete('/recipes/{recipe}', [RecipeController::class, 'destroy']);
     Route::get('/me/recipes', [RecipeController::class, 'myRecipes']);
+    Route::post('/recipes/bulk', [RecipeController::class, 'storeBulk']);
 
     Route::post('/categories', [CategoryController::class, 'store']);
     Route::put('/categories/{category}', [CategoryController::class, 'update']);
