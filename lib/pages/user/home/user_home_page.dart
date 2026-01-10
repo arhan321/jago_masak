@@ -19,8 +19,6 @@ class UserHomePage extends StatefulWidget {
 }
 
 class _UserHomePageState extends State<UserHomePage> {
-  final Set<int> _hiddenRecipeIds = {};
-
   Dio get _dio => ApiClient.instance.dio;
 
   int? _meId;
@@ -69,7 +67,6 @@ class _UserHomePageState extends State<UserHomePage> {
   }
 
   Future<void> _onRefresh() async {
-    _hiddenRecipeIds.clear();
     await _fetchMe();
     await Future.wait([
       _fetchRecipes(),
@@ -189,7 +186,7 @@ class _UserHomePageState extends State<UserHomePage> {
     await _checkNotifications();
   }
 
-  // ✅ FIX: badge tidak menghalangi klik
+  // ✅ badge tidak menghalangi klik
   Widget _notifActionButton() {
     final showBadge = _unreadNotifCount > 0;
     final badgeText = _unreadNotifCount > 9 ? '9+' : '$_unreadNotifCount';
@@ -211,7 +208,7 @@ class _UserHomePageState extends State<UserHomePage> {
                 right: 2,
                 top: 2,
                 child: IgnorePointer(
-                  ignoring: true, // ✅ kunci utama
+                  ignoring: true,
                   child: Container(
                     padding:
                         const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -299,6 +296,78 @@ class _UserHomePageState extends State<UserHomePage> {
     }
   }
 
+  // Future<void> _fetchRecipes() async {
+  //   if (!mounted) return;
+  //   setState(() {
+  //     _loadingRecipes = true;
+  //     _errorRecipes = null;
+  //   });
+
+  //   try {
+  //     final res = await _dio.get(
+  //       '/recipes',
+  //       queryParameters: const {'page': 1},
+  //     );
+
+  //     final data = res.data;
+  //     final baseUrl = _dio.options.baseUrl;
+
+  //     List<_ApiRecipeCard> parsed = [];
+
+  //     if (data is Map && data['data'] is List) {
+  //       final list = List.from(data['data'] as List);
+  //       parsed = list
+  //           .map((e) => e is Map
+  //               ? _ApiRecipeCard.fromJson(
+  //                   Map<String, dynamic>.from(e),
+  //                   baseUrl: baseUrl,
+  //                 )
+  //               : null)
+  //           .whereType<_ApiRecipeCard>()
+  //           .toList();
+  //     } else if (data is List) {
+  //       parsed = data
+  //           .map((e) => e is Map
+  //               ? _ApiRecipeCard.fromJson(
+  //                   Map<String, dynamic>.from(e),
+  //                   baseUrl: baseUrl,
+  //                 )
+  //               : null)
+  //           .whereType<_ApiRecipeCard>()
+  //           .toList();
+  //     } else {
+  //       throw Exception('Format response /recipes tidak sesuai');
+  //     }
+
+  //     parsed = parsed.take(20).toList();
+
+  //     if (!mounted) return;
+  //     setState(() {
+  //       _recipes = parsed;
+  //       _loadingRecipes = false;
+  //     });
+  //   } on DioException catch (e) {
+  //     if (!mounted) return;
+
+  //     if (e.response?.statusCode == 401) {
+  //       Navigator.pushNamedAndRemoveUntil(context, Routes.login, (r) => false);
+  //       return;
+  //     }
+
+  //     setState(() {
+  //       _loadingRecipes = false;
+  //       _errorRecipes = (e.response?.data is Map)
+  //           ? ((e.response?.data['message'] ?? 'Gagal memuat resep').toString())
+  //           : 'Gagal memuat resep';
+  //     });
+  //   } catch (e) {
+  //     if (!mounted) return;
+  //     setState(() {
+  //       _loadingRecipes = false;
+  //       _errorRecipes = e.toString().replaceFirst('Exception: ', '');
+  //     });
+  //   }
+  // }
   Future<void> _fetchRecipes() async {
     if (!mounted) return;
     setState(() {
@@ -307,19 +376,46 @@ class _UserHomePageState extends State<UserHomePage> {
     });
 
     try {
-      final res = await _dio.get(
-        '/recipes',
-        queryParameters: const {'page': 1},
-      );
-
-      final data = res.data;
       final baseUrl = _dio.options.baseUrl;
 
-      List<_ApiRecipeCard> parsed = [];
+      final List<_ApiRecipeCard> all = [];
+      int page = 1;
 
-      if (data is Map && data['data'] is List) {
-        final list = List.from(data['data'] as List);
-        parsed = list
+      // safety biar gak infinite loop kalau API error aneh
+      const int maxPages = 200;
+
+      while (page <= maxPages) {
+        Response res;
+
+        try {
+          res = await _dio.get(
+            '/recipes',
+            queryParameters: {'page': page},
+          );
+        } on DioException catch (e) {
+          // kalau page berikutnya tidak ada / 404, stop loop & pakai data yg sudah terkumpul
+          if (e.response?.statusCode == 404) {
+            break;
+          }
+          rethrow;
+        }
+
+        final data = res.data;
+
+        List<dynamic> rawList = [];
+
+        if (data is Map && data['data'] is List) {
+          rawList = List.from(data['data'] as List);
+        } else if (data is List) {
+          rawList = List.from(data);
+        } else {
+          throw Exception('Format response /recipes tidak sesuai');
+        }
+
+        // kalau kosong berarti sudah habis
+        if (rawList.isEmpty) break;
+
+        final batch = rawList
             .map((e) => e is Map
                 ? _ApiRecipeCard.fromJson(
                     Map<String, dynamic>.from(e),
@@ -328,25 +424,15 @@ class _UserHomePageState extends State<UserHomePage> {
                 : null)
             .whereType<_ApiRecipeCard>()
             .toList();
-      } else if (data is List) {
-        parsed = data
-            .map((e) => e is Map
-                ? _ApiRecipeCard.fromJson(
-                    Map<String, dynamic>.from(e),
-                    baseUrl: baseUrl,
-                  )
-                : null)
-            .whereType<_ApiRecipeCard>()
-            .toList();
-      } else {
-        throw Exception('Format response /recipes tidak sesuai');
+
+        all.addAll(batch);
+
+        page++;
       }
-
-      parsed = parsed.take(6).toList();
 
       if (!mounted) return;
       setState(() {
-        _recipes = parsed;
+        _recipes = all; // ✅ semua recipes masuk
         _loadingRecipes = false;
       });
     } on DioException catch (e) {
@@ -516,8 +602,8 @@ class _UserHomePageState extends State<UserHomePage> {
   Widget build(BuildContext context) {
     final helloName = _loadingMe ? '...' : _userName;
 
-    final recipes =
-        _recipes.where((r) => !_hiddenRecipeIds.contains(r.id)).toList();
+    // ✅ FIX: jangan sembunyikan recipe hanya karena image error
+    final recipes = _recipes;
 
     return SafeArea(
       child: Scaffold(
@@ -655,32 +741,32 @@ class _UserHomePageState extends State<UserHomePage> {
                           ),
                           child: Stack(
                             children: [
+                              // ✅ FIX: jika imageUrl kosong / error, tetap tampilkan card dengan placeholder kosong
                               Positioned.fill(
-                                child: Image.network(
-                                  r.imageUrl,
-                                  fit: BoxFit.cover,
-                                  loadingBuilder: (context, child, progress) {
-                                    if (progress == null) return child;
-                                    return Container(
-                                      color: Colors.black12,
-                                      alignment: Alignment.center,
-                                      child: const CircularProgressIndicator(
-                                          strokeWidth: 2),
-                                    );
-                                  },
-                                  errorBuilder: (_, __, ___) {
-                                    WidgetsBinding.instance
-                                        .addPostFrameCallback((_) {
-                                      if (mounted &&
-                                          !_hiddenRecipeIds.contains(r.id)) {
-                                        setState(
-                                            () => _hiddenRecipeIds.add(r.id));
-                                      }
-                                    });
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
+                                child: (r.imageUrl.trim().isEmpty)
+                                    ? Container(color: Colors.black12)
+                                    : Image.network(
+                                        r.imageUrl,
+                                        fit: BoxFit.cover,
+                                        loadingBuilder:
+                                            (context, child, progress) {
+                                          if (progress == null) return child;
+                                          return Container(
+                                            color: Colors.black12,
+                                            alignment: Alignment.center,
+                                            child:
+                                                const CircularProgressIndicator(
+                                                    strokeWidth: 2),
+                                          );
+                                        },
+                                        errorBuilder: (_, __, ___) {
+                                          return Container(
+                                            color: Colors.black12,
+                                          );
+                                        },
+                                      ),
                               ),
+
                               Positioned(
                                 right: 8,
                                 top: 8,
